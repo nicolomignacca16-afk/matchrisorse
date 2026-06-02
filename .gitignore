@@ -1,0 +1,16 @@
+# ⚠️ DATI PERSONALI (GDPR) — non versionare né pubblicare online
+# Il file generato contiene nomi, indirizzi di casa e telefoni dei dipendenti.
+# Se pubblichi il sito (es. GitHub Pages), questo NON deve finire online:
+# l'app userà automaticamente i dati di esempio al suo posto.
+js/dipendenti-reali.js
+
+# File sorgente con dati personali
+*.xlsx
+*.docx
+*.m4a
+
+# Sistema
+.DS_Store
+
+# Config editor / strumenti
+.claude/

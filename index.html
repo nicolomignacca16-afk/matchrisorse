@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestionale Logistica — Consiglio Personale</title>
+
+  <!-- Mappe: Leaflet + OpenStreetMap (gratuito) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Schermata di accesso (mostrata solo quando i dati sono cifrati, es. sito pubblicato) -->
+  <div id="login" class="login" hidden>
+    <div class="login-box">
+      <div class="login-logo">🔒</div>
+      <h2>Accesso riservato</h2>
+      <p class="login-sub">Inserisci la password per visualizzare i dati.</p>
+      <input id="login-pwd" type="password" placeholder="Password" autocomplete="current-password" />
+      <p id="login-err" class="form-stato"></p>
+      <button id="login-btn" type="button" class="btn primary">Entra</button>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📍</span>
+      <div>
+        <h1>Gestionale Logistica</h1>
+        <p class="subtitle">Consiglio del personale per mansione, vicinanza e disponibilità</p>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button id="tab-cerca" class="tab active">Cerca personale</button>
+      <button id="tab-dipendenti" class="tab">Dipendenti</button>
+      <button id="tab-calendario" class="tab">Calendario</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ===================== VISTA: CERCA PERSONALE ===================== -->
+    <section id="view-cerca" class="view view-cerca">
+      <aside class="sidebar">
+        <form id="form-cerca" class="card">
+          <h2>Nuovo lavoro</h2>
+
+          <label for="input-indirizzo">Indirizzo del lavoro</label>
+          <input id="input-indirizzo" type="text" placeholder="Inizia a scrivere: es. Via Dante 10, Milano" autocomplete="off" />
+          <div id="suggerimenti" class="suggerimenti" hidden></div>
+
+          <span class="label">Mansioni richieste (una o più)</span>
+          <div id="mansioni-richieste" class="mansioni-pick"></div>
+
+          <label for="input-data">Data e ora del lavoro</label>
+          <input id="input-data" type="text" readonly autocomplete="off" />
+
+          <div class="row">
+            <label class="inline">
+              <input id="check-disponibili" type="checkbox" />
+              Solo disponibili in quella data
+            </label>
+            <label class="inline raggio">
+              Raggio max
+              <input id="input-raggio" type="number" min="1" step="1" placeholder="km" />
+            </label>
+          </div>
+
+          <button id="btn-cerca" type="submit" class="btn primary">Consiglia personale</button>
+          <p id="form-stato" class="form-stato"></p>
+        </form>
+
+        <div id="risultati-meta" class="risultati-meta"></div>
+        <div id="risultati" class="risultati"></div>
+      </aside>
+
+      <div id="map"></div>
+    </section>
+
+    <!-- ===================== VISTA: DIPENDENTI ===================== -->
+    <section id="view-dipendenti" class="view view-dipendenti" hidden>
+      <div class="toolbar">
+        <h2>Anagrafica dipendenti</h2>
+        <div class="toolbar-actions">
+          <input id="cerca-dip" type="text" class="cerca-dip" placeholder="🔍 Cerca nome, mansione, indirizzo…" autocomplete="off" />
+          <button id="btn-aggiungi" class="btn primary">+ Aggiungi dipendente</button>
+          <button id="btn-reset" class="btn ghost" title="Ricarica l'elenco originale importato (annulla le modifiche fatte qui)">Ricarica originale</button>
+          <button id="btn-proteggi" class="btn ghost" title="Genera il file cifrato per pubblicare il sito protetto da password">🔒 Proteggi sito</button>
+        </div>
+      </div>
+      <div id="lista-dipendenti" class="lista-dipendenti"></div>
+    </section>
+
+    <!-- ===================== VISTA: CALENDARIO ===================== -->
+    <section id="view-calendario" class="view view-calendario" hidden>
+      <div class="cal-top">
+        <button id="cal-prev" class="btn ghost" title="Mese precedente">‹</button>
+        <h2 id="cal-titolo">—</h2>
+        <button id="cal-next" class="btn ghost" title="Mese successivo">›</button>
+        <button id="cal-oggi" class="btn ghost">Oggi</button>
+        <span class="cal-legenda">Il numero indica quante persone sono occupate quel giorno. Clicca un giorno per i dettagli.</span>
+      </div>
+      <div class="cal-settimana">
+        <span>Lun</span><span>Mar</span><span>Mer</span><span>Gio</span><span>Ven</span><span>Sab</span><span>Dom</span>
+      </div>
+      <div id="cal-griglia" class="cal-griglia"></div>
+      <div id="cal-dettaglio" class="cal-dettaglio"></div>
+    </section>
+  </main>
+
+  <!-- ===================== MODALE: AGGIUNGI / MODIFICA DIPENDENTE ===================== -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
+      <button id="btn-chiudi-x" type="button" class="modal-x" title="Chiudi" aria-label="Chiudi">✕</button>
+      <h2 id="modal-title">Aggiungi dipendente</h2>
+      <form id="modal-form">
+        <input id="f-id" type="hidden" />
+
+        <label for="f-nome">Nome e cognome</label>
+        <input id="f-nome" type="text" required />
+
+        <label for="f-telefono">Telefono</label>
+        <input id="f-telefono" type="text" placeholder="(facoltativo)" />
+
+        <label for="f-indirizzo">Indirizzo di domicilio</label>
+        <input id="f-indirizzo" type="text" required placeholder="Es. Viale Monza 50, Milano" />
+
+        <span class="label">Mansioni</span>
+        <div id="f-mansioni" class="checkbox-grid"></div>
+
+        <label for="f-competenze">Competenze / note</label>
+        <input id="f-competenze" type="text" placeholder="(facoltativo) es. patente C, uso transpallet" />
+
+        <p class="hint">La disponibilità si gestisce dai <b>periodi di occupazione</b> (pulsante “📅 Periodi” sulla scheda del dipendente).</p>
+
+        <p id="modal-stato" class="form-stato"></p>
+
+        <div class="modal-actions">
+          <button id="btn-annulla" type="button" class="btn ghost">Annulla</button>
+          <button id="btn-salva" type="submit" class="btn primary">Salva</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODALE: PERIODI DI OCCUPAZIONE ===================== -->
+  <div id="modal-impegni" class="modal" hidden>
+    <div class="modal-box">
+      <button id="btn-impegni-x" type="button" class="modal-x" title="Chiudi" aria-label="Chiudi">✕</button>
+      <h2 id="impegni-titolo">Periodi di occupazione</h2>
+
+      <div id="impegni-lista" class="impegni-lista"></div>
+
+      <h3 class="impegni-sub">Aggiungi un periodo</h3>
+      <div class="impegni-form">
+        <label>Inizio (data e ora)<input id="imp-dal" type="text" readonly autocomplete="off" /></label>
+        <label>Fine (facoltativa)<input id="imp-al" type="text" readonly autocomplete="off" /></label>
+        <label class="full">Note / cantiere<input id="imp-note" type="text" placeholder="(facoltativo) es. Cantiere Via Roma" /></label>
+      </div>
+      <p class="hint">Puoi inserire più periodi nello stesso giorno (es. 08:00–12:00 e poi 14:00–17:00). Se lasci vuota la fine, vale fino a fine giornata.</p>
+      <p id="impegni-stato" class="form-stato"></p>
+
+      <div class="modal-actions">
+        <button id="btn-impegni-chiudi" type="button" class="btn ghost">Chiudi</button>
+        <button id="btn-impegni-aggiungi" type="button" class="btn primary">Aggiungi periodo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE: proteggi il sito con password (genera il file cifrato da pubblicare) -->
+  <div id="modal-pwd" class="modal" hidden>
+    <div class="modal-box">
+      <button id="btn-pwd-x" type="button" class="modal-x" title="Chiudi" aria-label="Chiudi">✕</button>
+      <h2>🔒 Proteggi il sito con password</h2>
+      <p class="hint">Genera il file cifrato da pubblicare online: i dati saranno leggibili solo inserendo questa password.
+      Conservala bene — se la perdi dovrai rigenerare il file. (La password resta solo tua: non viene salvata né inviata.)</p>
+      <label for="pwd-1">Password</label>
+      <input id="pwd-1" type="password" autocomplete="new-password" />
+      <label for="pwd-2">Conferma password</label>
+      <input id="pwd-2" type="password" autocomplete="new-password" />
+      <p id="pwd-stato" class="form-stato"></p>
+      <div class="modal-actions">
+        <button id="btn-pwd-annulla" type="button" class="btn ghost">Annulla</button>
+        <button id="btn-pwd-genera" type="button" class="btn primary">Genera file protetto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Etichetta di stato/versione: conferma dati caricati e pagina aggiornata -->
+  <div id="stato-app" class="stato-app">…</div>
+
+  <!-- Logica applicativa (script classici, nessun build necessario) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Dati cifrati (sito pubblicato). Manca finché non lo generi con "Proteggi sito": è normale. -->
+  <script src="js/dati-cifrati.js"></script>
+  <!-- Dati in chiaro (solo locale, escluso dalla pubblicazione tramite .gitignore) -->
+  <script src="js/dipendenti-reali.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/geo.js"></script>
+  <script src="js/impegni.js"></script>
+  <script src="js/datepicker.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
