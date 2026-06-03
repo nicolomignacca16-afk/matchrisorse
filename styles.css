@@ -371,6 +371,21 @@ input:focus, select:focus {
   font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
   background: rgba(99, 102, 241, 0.12); color: #3730a3; border: 1px solid rgba(99, 102, 241, 0.25);
 }
+.cal-persona { cursor: pointer; }
+
+/* Dettaglio persona (dal calendario) */
+.pd-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+.pd-head h2 { margin: 0; letter-spacing: -0.01em; }
+.pd-head .cal-avatar { width: 50px; height: 50px; font-size: 17px; }
+.pd-mans { font-size: 13px; color: var(--testo-soft); margin-top: 3px; }
+.pd-riga { font-size: 14px; color: #334155; margin: 7px 0; }
+.pd-sub { font-size: 14px; margin: 18px 0 8px; }
+.pd-lavoro {
+  background: rgba(255, 255, 255, 0.55); border: 1px solid var(--bordo-glass);
+  border-radius: 12px; padding: 12px 14px; margin: 8px 0;
+}
+.pd-titolo { font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+.pd-dur { color: var(--indigo); font-weight: 700; }
 
 /* ---------- Selettore data+ora personalizzato ---------- */
 .dp-input { cursor: pointer; }

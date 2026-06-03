@@ -123,8 +123,11 @@
     $("#btn-pwd-genera").addEventListener("click", generaProtetto);
     $("#modal-pwd").addEventListener("click", (e) => { if (e.target.id === "modal-pwd") chiudiPwd(); });
 
+    $("#btn-persona-x").addEventListener("click", chiudiPersona);
+    $("#modal-persona").addEventListener("click", (e) => { if (e.target.id === "modal-persona") chiudiPersona(); });
+
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { chiudiModale(); chiudiImpegni(); chiudiPwd(); }
+      if (e.key === "Escape") { chiudiModale(); chiudiImpegni(); chiudiPwd(); chiudiPersona(); }
     });
 
     $("#cal-prev").addEventListener("click", () => cambiaMese(-1));
@@ -732,7 +735,7 @@
           const slots = GL.impegni.impegniGiorno(d, calGiornoSel)
             .map((i) => `<span class="cal-slot">${esc(fasciaOggi(i, calGiornoSel))} · ${esc(titoloImpegno(i))}</span>`)
             .join("");
-          return `<div class="cal-persona">
+          return `<div class="cal-persona" data-id="${d.id}" title="Clicca per il dettaglio">
             <span class="cal-avatar" style="background:hsl(${tonoPersona(d.nome)} 58% 52%)">${esc(iniziali(d.nome))}</span>
             <div class="cal-persona-info">
               <div class="cal-persona-nome">${esc(d.nome)}</div>
@@ -744,14 +747,46 @@
         .join("") + `</div>`;
     }
     cont.innerHTML = html;
+    cont.querySelectorAll(".cal-persona[data-id]").forEach((el) => {
+      el.addEventListener("click", () => apriPersona(el.dataset.id, calGiornoSel));
+    });
   }
+
+  // Dettaglio persona (dal calendario): titolo lavoro, durata, dove.
+  function apriPersona(id, giorno) {
+    const d = dipendenti.find((x) => x.id === id);
+    if (!d) return;
+    const imp = GL.impegni.impegniGiorno(d, giorno);
+    const lavori = imp
+      .map((i) => `
+        <div class="pd-lavoro">
+          <div class="pd-titolo">🏷️ ${esc(titoloImpegno(i))}</div>
+          <div class="pd-riga">⏳ Dal ${esc(GL.impegni.formattaDataOra(i.dal))} <b>fino al ${esc(GL.impegni.formattaDataOra(i.al))}</b> <span class="pd-dur">(${GL.impegni.oreFmt(GL.impegni.oreImpegno(i))})</span></div>
+          <div class="pd-riga">📍 Dove: ${esc(i.note || "luogo non indicato")}</div>
+        </div>`)
+      .join("");
+    $("#persona-dettaglio").innerHTML = `
+      <div class="pd-head">
+        <span class="cal-avatar" style="background:hsl(${tonoPersona(d.nome)} 58% 52%)">${esc(iniziali(d.nome))}</span>
+        <div>
+          <h2>${esc(d.nome)}</h2>
+          <div class="pd-mans">${esc(d.mansioni.join(" · "))}</div>
+        </div>
+      </div>
+      <div class="pd-riga">📞 ${esc(d.telefono || "—")}</div>
+      <div class="pd-riga">🏠 Domicilio: ${esc(d.indirizzo)}</div>
+      <h3 class="pd-sub">Impegni del ${GL.impegni.formattaData(giorno)}</h3>
+      ${lavori || '<p class="vuoto">Nessun impegno in questa data.</p>'}`;
+    $("#modal-persona").hidden = false;
+  }
+  function chiudiPersona() { $("#modal-persona").hidden = true; }
 
   // ============================================================
   //  Utility
   // ============================================================
   function aggiornaStatoApp() {
     const sa = $("#stato-app");
-    if (sa) sa.textContent = `build 16 · ${dipendenti.length} dipendenti · ${MANSIONI.length} mansioni`;
+    if (sa) sa.textContent = `build 17 · ${dipendenti.length} dipendenti · ${MANSIONI.length} mansioni`;
   }
 
   function setStato(el, testo, classe) {
