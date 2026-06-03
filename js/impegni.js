@@ -76,9 +76,46 @@ GL.impegni = (function () {
   function nomeMese(mese) { return MESI[mese]; }
   function nuovoId() { return "i" + Date.now() + "-" + Math.floor(Math.random() * 10000); }
 
+  // --- Calcolo ore assegnate per settimana (per gli alert sul contratto) ---
+  function oreImpegno(i) {
+    const ms = new Date(i.dal.length === 10 ? i.dal + "T00:00" : i.dal) -
+               new Date(i.al.length === 10 ? i.al + "T00:00" : i.al);
+    const ore = Math.abs(ms) / 3600000;
+    return ore > 0 ? ore : 0;
+  }
+  // Lunedì (ISO) della settimana che contiene la data "YYYY-MM-DD".
+  function lunediISO(isoDate) {
+    const d = new Date(isoDate + "T00:00");
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return iso(d);
+  }
+  // Mappa settimana(lunedì) -> ore totali assegnate (impegni attribuiti alla settimana d'inizio).
+  function orePerSettimana(dip) {
+    const m = {};
+    (dip.impegni || []).forEach((i) => {
+      const wk = lunediISO(dataParte(i.dal));
+      m[wk] = (m[wk] || 0) + oreImpegno(i);
+    });
+    return m;
+  }
+  // Settimane in cui le ore superano quelle contrattuali.
+  function settimaneSovraccarico(dip) {
+    const contr = parseFloat(dip.orarioContrattuale);
+    if (!contr || isNaN(contr)) return [];
+    const m = orePerSettimana(dip);
+    return Object.keys(m)
+      .filter((wk) => m[wk] > contr + 0.001)
+      .sort()
+      .map((wk) => ({ settimana: wk, ore: m[wk], contrattuali: contr }));
+  }
+  function oreFmt(h) {
+    return (Math.round(h * 10) / 10).toString().replace(".", ",") + "h";
+  }
+
   return {
     iso, oggiISO, adessoISO, dataParte, oraParte,
     occupatoIstante, impegnoIstante, occupatoGiorno, impegniGiorno,
     grigliaMese, formattaData, formattaDataOra, descrivi, nomeMese, nuovoId,
+    oreImpegno, orePerSettimana, settimaneSovraccarico, oreFmt,
   };
 })();

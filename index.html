@@ -149,12 +149,14 @@
       <h2 id="impegni-titolo">Periodi di occupazione</h2>
 
       <div id="impegni-lista" class="impegni-lista"></div>
+      <div id="impegni-ore" class="impegni-ore"></div>
 
       <h3 class="impegni-sub">Aggiungi un periodo</h3>
       <div class="impegni-form">
+        <label class="full">Titolo del lavoro<input id="imp-titolo" type="text" placeholder="es. Pulizia uffici Rossi SpA" /></label>
         <label>Inizio (data e ora)<input id="imp-dal" type="text" readonly autocomplete="off" /></label>
         <label>Fine (facoltativa)<input id="imp-al" type="text" readonly autocomplete="off" /></label>
-        <label class="full">Note / cantiere<input id="imp-note" type="text" placeholder="(facoltativo) es. Cantiere Via Roma" /></label>
+        <label class="full">Note / cantiere<input id="imp-note" type="text" placeholder="(facoltativo) es. indirizzo, dettagli" /></label>
       </div>
       <p class="hint">Puoi inserire più periodi nello stesso giorno (es. 08:00–12:00 e poi 14:00–17:00). Se lasci vuota la fine, vale fino a fine giornata.</p>
       <p id="impegni-stato" class="form-stato"></p>

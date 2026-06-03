@@ -459,6 +459,16 @@ input:focus, select:focus {
 .impegni-form label { font-size: 13px; font-weight: 600; display: flex; flex-direction: column; gap: 5px; margin: 0; }
 .impegni-form label.full { grid-column: 1 / -1; }
 
+/* Alert ore settimanali superate */
+.alert-ore {
+  margin: 8px 0; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 700;
+  background: var(--rosso-chiaro); color: #b91c1c; border: 1px solid #fca5a5;
+}
+.impegni-ore { margin: 6px 0 2px; }
+.ore-tit { font-size: 12px; font-weight: 800; color: #334155; margin: 10px 0 4px; }
+.ore-riga { font-size: 12.5px; color: var(--testo-soft); padding: 2px 0; }
+.ore-riga.over { color: #b91c1c; font-weight: 700; }
+
 /* ---------- Etichetta versione ---------- */
 .stato-app {
   position: fixed; bottom: 10px; left: 10px; z-index: 500;

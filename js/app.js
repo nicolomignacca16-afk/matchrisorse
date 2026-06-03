@@ -193,7 +193,7 @@
             ...d,
             distanza: GL.geo.distanzaKm(lavoro, d),
             occupato,
-            noteImpegno: imp ? (imp.note || "occupato") + " (" + GL.impegni.descrivi(imp) + ")" : "",
+            noteImpegno: imp ? titoloImpegno(imp) + " (" + GL.impegni.descrivi(imp) + ")" : "",
           };
         })
         .filter((d) => (soloDisponibili ? !d.occupato : true))
@@ -353,7 +353,11 @@
           ? ` <span class="approx" title="Via non trovata: posizione approssimata al comune">≈ approssimato</span>`
           : "";
         const notaOcc = occ
-          ? `<div class="dip-info">📅 Oggi: ${impOggi.map((i) => esc((i.note || "occupato") + " " + fasciaOggi(i, oggi))).join(" · ")}</div>`
+          ? `<div class="dip-info">📅 Oggi: ${impOggi.map((i) => esc(titoloImpegno(i) + " " + fasciaOggi(i, oggi))).join(" · ")}</div>`
+          : "";
+        const sovra = GL.impegni.settimaneSovraccarico(d);
+        const alertOre = sovra.length
+          ? `<div class="alert-ore">⚠️ Ore settimanali superate: ${GL.impegni.oreFmt(Math.max(...sovra.map((s) => s.ore)))} su ${esc(d.orarioContrattuale)}h${sovra.length > 1 ? " · " + sovra.length + " settimane" : ""}</div>`
           : "";
         const contratto = [
           d.codiceContratto,
@@ -381,6 +385,7 @@
           ${d.dataFineRapporto ? `<div class="dip-info">⏳ Fine rapporto: ${GL.impegni.formattaData(d.dataFineRapporto)}</div>` : ""}
           ${d.competenze ? `<div class="dip-info">🛠 ${esc(d.competenze)}</div>` : ""}
           <div class="dip-info">${badge}</div>
+          ${alertOre}
           ${notaOcc}
           <div class="dip-tags">${tags || '<span class="dip-info">Nessuna mansione</span>'}</div>
           ${formBlock}
@@ -404,6 +409,11 @@
       return GL.impegni.oraParte(i.dal) + "–" + GL.impegni.oraParte(i.al);
     }
     return "tutto il giorno";
+  }
+
+  // Etichetta principale di un impegno: titolo del lavoro, poi nota, poi generico.
+  function titoloImpegno(i) {
+    return i.titolo || i.note || "Occupato";
   }
 
   // Stato di una scadenza certificato: scaduto / presto (entro 60 gg) / valido.
@@ -525,6 +535,7 @@
     $("#impegni-titolo").textContent = "Periodi di occupazione — " + d.nome;
     GL.datepicker.clear($("#imp-dal"));
     GL.datepicker.clear($("#imp-al"));
+    $("#imp-titolo").value = "";
     $("#imp-note").value = "";
     $("#impegni-stato").textContent = "";
     renderImpegniLista();
@@ -544,27 +555,49 @@
     const imp = (d.impegni || []).slice().sort((a, b) => (a.dal < b.dal ? -1 : 1));
     if (!imp.length) {
       cont.innerHTML = `<p class="vuoto">Nessun periodo inserito: la persona risulta sempre disponibile.</p>`;
-      return;
+    } else {
+      cont.innerHTML = imp
+        .map((i) => {
+          const attivo = adesso >= i.dal && adesso <= i.al;
+          const nota = i.note && i.titolo ? " · " + esc(i.note) : "";
+          return `
+          <div class="imp-riga ${attivo ? "attivo" : ""}">
+            <span>📅 <b>${esc(titoloImpegno(i))}</b> · ${GL.impegni.descrivi(i)}${nota}${attivo ? ' <span class="badge occ">in corso</span>' : ""}</span>
+            <button class="btn ghost link-danger" data-imp="${i.id}">Rimuovi</button>
+          </div>`;
+        })
+        .join("");
+      cont.querySelectorAll("button[data-imp]").forEach((b) => {
+        b.addEventListener("click", () => rimuoviImpegno(b.dataset.imp));
+      });
     }
-    cont.innerHTML = imp
-      .map((i) => {
-        const attivo = adesso >= i.dal && adesso <= i.al;
-        return `
-        <div class="imp-riga ${attivo ? "attivo" : ""}">
-          <span>📅 <b>${GL.impegni.descrivi(i)}</b>${i.note ? " · " + esc(i.note) : ""}${attivo ? ' <span class="badge occ">in corso</span>' : ""}</span>
-          <button class="btn ghost link-danger" data-imp="${i.id}">Rimuovi</button>
-        </div>`;
-      })
-      .join("");
-    cont.querySelectorAll("button[data-imp]").forEach((b) => {
-      b.addEventListener("click", () => rimuoviImpegno(b.dataset.imp));
-    });
+    renderRiepilogoOre();
+  }
+
+  // Riepilogo ore assegnate per settimana, con alert se superano il contratto.
+  function renderRiepilogoOre() {
+    const d = dipendenti.find((x) => x.id === impegniDipId);
+    const cont = $("#impegni-ore");
+    if (!d) { cont.innerHTML = ""; return; }
+    const contr = parseFloat(d.orarioContrattuale);
+    const m = GL.impegni.orePerSettimana(d);
+    const settimane = Object.keys(m).sort();
+    if (!settimane.length) { cont.innerHTML = ""; return; }
+    cont.innerHTML =
+      `<div class="ore-tit">Ore per settimana${contr ? " (contratto: " + contr + "h)" : ""}</div>` +
+      settimane
+        .map((wk) => {
+          const over = contr && m[wk] > contr + 0.001;
+          return `<div class="ore-riga ${over ? "over" : ""}">Sett. del ${GL.impegni.formattaData(wk)}: <b>${GL.impegni.oreFmt(m[wk])}</b>${contr ? " / " + contr + "h" : ""}${over ? " ⚠️ superate" : ""}</div>`;
+        })
+        .join("");
   }
 
   function aggiungiImpegno() {
     const stato = $("#impegni-stato");
     const dal = GL.datepicker.getValue($("#imp-dal")); // "YYYY-MM-DDTHH:MM" o ""
     let al = GL.datepicker.getValue($("#imp-al"));
+    const titolo = $("#imp-titolo").value.trim();
     const note = $("#imp-note").value.trim();
     if (!dal) return setStato(stato, "Inserisci almeno la data e l'ora di inizio.", "errore");
     if (!al) al = GL.impegni.dataParte(dal) + "T23:59"; // fine non indicata = fino a fine giornata
@@ -572,12 +605,13 @@
 
     dipendenti = dipendenti.map((d) =>
       d.id === impegniDipId
-        ? { ...d, impegni: [...(d.impegni || []), { id: GL.impegni.nuovoId(), dal, al, note }] }
+        ? { ...d, impegni: [...(d.impegni || []), { id: GL.impegni.nuovoId(), dal, al, titolo, note }] }
         : d
     );
     GL.data.salva(dipendenti);
     GL.datepicker.clear($("#imp-dal"));
     GL.datepicker.clear($("#imp-al"));
+    $("#imp-titolo").value = "";
     $("#imp-note").value = "";
     setStato(stato, "✅ Periodo aggiunto.", "ok");
     renderImpegniLista();
@@ -696,7 +730,7 @@
       html += `<div class="cal-persone">` + occ
         .map((d) => {
           const slots = GL.impegni.impegniGiorno(d, calGiornoSel)
-            .map((i) => `<span class="cal-slot">${esc(fasciaOggi(i, calGiornoSel))}${i.note ? " · " + esc(i.note) : ""}</span>`)
+            .map((i) => `<span class="cal-slot">${esc(fasciaOggi(i, calGiornoSel))} · ${esc(titoloImpegno(i))}</span>`)
             .join("");
           return `<div class="cal-persona">
             <span class="cal-avatar" style="background:hsl(${tonoPersona(d.nome)} 58% 52%)">${esc(iniziali(d.nome))}</span>
@@ -717,7 +751,7 @@
   // ============================================================
   function aggiornaStatoApp() {
     const sa = $("#stato-app");
-    if (sa) sa.textContent = `build 15 · ${dipendenti.length} dipendenti · ${MANSIONI.length} mansioni`;
+    if (sa) sa.textContent = `build 16 · ${dipendenti.length} dipendenti · ${MANSIONI.length} mansioni`;
   }
 
   function setStato(el, testo, classe) {
