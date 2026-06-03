@@ -76,10 +76,13 @@
   //  Mappa
   // ============================================================
   function initMappa() {
-    map = L.map("map").setView([45.4642, 9.19], 11);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "© OpenStreetMap",
+    map = L.map("map", { zoomControl: true }).setView([45.4642, 9.19], 11);
+    // Stile "Positron" (chiaro e minimal) — CARTO basemaps, gratuito, senza chiave.
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 20,
+      subdomains: "abcd",
+      detectRetina: true,
+      attribution: "© OpenStreetMap, © CARTO",
     }).addTo(map);
     layerMarker = L.layerGroup().addTo(map);
     setTimeout(() => map.invalidateSize(), 200);
@@ -714,7 +717,7 @@
   // ============================================================
   function aggiornaStatoApp() {
     const sa = $("#stato-app");
-    if (sa) sa.textContent = `build 14 · ${dipendenti.length} dipendenti · ${MANSIONI.length} mansioni`;
+    if (sa) sa.textContent = `build 15 · ${dipendenti.length} dipendenti · ${MANSIONI.length} mansioni`;
   }
 
   function setStato(el, testo, classe) {
