@@ -31,15 +31,67 @@
       </div>
     </div>
     <nav class="tabs">
-      <button id="tab-cerca" class="tab active">Cerca personale</button>
+      <button id="tab-servizi" class="tab active">Servizi</button>
+      <button id="tab-cerca" class="tab">Cerca personale</button>
       <button id="tab-dipendenti" class="tab">Dipendenti</button>
       <button id="tab-calendario" class="tab">Calendario</button>
     </nav>
   </header>
 
   <main>
+    <!-- ===================== VISTA: SERVIZI (calendario dei lavori) ===================== -->
+    <section id="view-servizi" class="view view-servizi">
+      <div class="srv-top">
+        <div class="srv-nav">
+          <button id="srv-prev" class="btn ghost" title="Mese precedente">‹</button>
+          <h2 id="srv-titolo">—</h2>
+          <button id="srv-next" class="btn ghost" title="Mese successivo">›</button>
+        </div>
+        <div class="srv-modi">
+          <button id="srv-modo-mese" class="srv-modo" data-modo="mese">🗓 Mese</button>
+          <button id="srv-modo-timeline" class="srv-modo active" data-modo="timeline">📊 Timeline</button>
+        </div>
+        <div id="srv-riepilogo" class="srv-riepilogo"></div>
+      </div>
+
+      <div class="srv-legenda" id="srv-legenda"></div>
+
+      <div class="srv-filtri">
+        <div id="srv-filtri-cat" class="srv-filtri-cat"></div>
+        <label class="srv-filtro-att">
+          Attività
+          <select id="srv-att"><option value="">Tutte</option></select>
+        </label>
+        <div class="srv-azioni">
+          <button id="srv-assegna" class="btn primary" title="Assegna in automatico le risorse richieste a ogni lavoro (per mansione e disponibilità)">⚙️ Assegna risorse</button>
+          <button id="srv-pulisci" class="btn ghost" title="Rimuovi tutte le assegnazioni">Pulisci</button>
+        </div>
+      </div>
+
+      <div class="srv-layout">
+        <div class="srv-main">
+          <!-- Modalità MESE: calendario mensile + dettaglio giornata -->
+          <div class="srv-body" id="srv-vista-mese" hidden>
+            <div class="srv-cal">
+              <div class="cal-settimana">
+                <span>Lun</span><span>Mar</span><span>Mer</span><span>Gio</span><span>Ven</span><span>Sab</span><span>Dom</span>
+              </div>
+              <div id="srv-griglia" class="srv-griglia"></div>
+            </div>
+            <div id="srv-dettaglio" class="srv-dettaglio"></div>
+          </div>
+
+          <!-- Modalità TIMELINE: righe = cliente, colonne = giorni, barre = lavori -->
+          <div id="srv-vista-timeline" class="srv-timeline-wrap"></div>
+        </div>
+
+        <!-- Colonna riepilogo lavori scoperti (mancano risorse) -->
+        <aside id="srv-scoperti" class="srv-scoperti"></aside>
+      </div>
+    </section>
+
     <!-- ===================== VISTA: CERCA PERSONALE ===================== -->
-    <section id="view-cerca" class="view view-cerca">
+    <section id="view-cerca" class="view view-cerca" hidden>
       <aside class="sidebar">
         <form id="form-cerca" class="card">
           <h2>Nuovo lavoro</h2>
@@ -187,6 +239,14 @@
     </div>
   </div>
 
+  <!-- MODALE: dettaglio servizio (risorse assegnate con nomi completi) -->
+  <div id="modal-servizio" class="modal" hidden>
+    <div class="modal-box">
+      <button id="btn-servizio-x" type="button" class="modal-x" title="Chiudi" aria-label="Chiudi">✕</button>
+      <div id="servizio-dettaglio"></div>
+    </div>
+  </div>
+
   <!-- MODALE: dettaglio persona (apribile dal calendario) -->
   <div id="modal-persona" class="modal" hidden>
     <div class="modal-box">
@@ -204,9 +264,12 @@
   <script src="js/dati-cifrati.js"></script>
   <!-- Dati in chiaro (solo locale, escluso dalla pubblicazione tramite .gitignore) -->
   <script src="js/dipendenti-reali.js"></script>
+  <!-- Servizi reali importati dall'Excel (anch'essi solo locali) -->
+  <script src="js/servizi-reali.js"></script>
   <script src="js/data.js"></script>
   <script src="js/geo.js"></script>
   <script src="js/impegni.js"></script>
+  <script src="js/servizi.js"></script>
   <script src="js/datepicker.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/app.js"></script>

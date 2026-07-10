@@ -17,6 +17,13 @@
   let calAnno = 0, calMese = 0;
   let calGiornoSel = null;
 
+  // --- Stato vista Servizi (calendario dei lavori) ---
+  let servizi = [];
+  let srvAnno = 0, srvMese = 0, srvGiornoSel = null;
+  let srvFiltroCat = null;  // null = tutte le categorie
+  let srvFiltroAtt = "";     // "" = tutte le attività
+  let srvModo = "timeline";  // "mese" | "timeline" — Timeline è la vista predefinita
+
   document.addEventListener("DOMContentLoaded", bootstrap);
 
   // All'avvio: se i dati sono cifrati (sito pubblicato) chiede la password,
@@ -39,6 +46,7 @@
         const dati = await GL.auth.decifra(pwd, window.GL_CIFRATO);
         window.GL_SEED = dati.seed;
         window.GL_MANSIONI = dati.mansioni;
+        if (dati.servizi) window.GL_SERVIZI_REALI = dati.servizi;
         overlay.hidden = true;
         init();
       } catch (e) {
@@ -57,11 +65,42 @@
     calAnno = oggi.getFullYear();
     calMese = oggi.getMonth();
     calGiornoSel = GL.impegni.oggiISO();
+    initServiziStato();
     initMappa();
     bindEventi();
     initDatePicker();
     renderListaDipendenti();
+    initServizi();
     aggiornaStatoApp();
+  }
+
+  // Prepara lo stato della vista Servizi: mese con dati + primo giorno che ha servizi.
+  // Versione del motore/dati di assegnazione: va incrementata quando cambiano la
+  // logica di assegnazione, le durate stimate o l'elenco servizi (ID diversi).
+  // Così, al reload, le assegnazioni "vecchie" salvate nel browser vengono rigenerate.
+  const ENGINE_VERSION = "2026-07-10c";
+  const ENGINE_VERSION_KEY = "gl_servizi_engine_v";
+
+  function initServiziStato() {
+    servizi = GL.servizi.carica();
+    const mi = GL.servizi.meseIniziale();
+    srvAnno = mi.anno;
+    srvMese = mi.mese;
+    srvGiornoSel = primoGiornoConServizi() || GL.impegni.iso(new Date(srvAnno, srvMese, 1));
+    // Assegna in automatico se non c'è nulla di salvato OPPURE se le assegnazioni
+    // salvate sono state generate da una versione precedente (dati/logica cambiati).
+    let verSalvata = null;
+    try { verSalvata = localStorage.getItem(ENGINE_VERSION_KEY); } catch (e) { /* ignora */ }
+    const giaAssegnato = servizi.some((s) => (s.assegnati || []).length);
+    if (!giaAssegnato || verSalvata !== ENGINE_VERSION) {
+      assegnaAutomatico({ soloVuoti: false, salva: true });
+      try { localStorage.setItem(ENGINE_VERSION_KEY, ENGINE_VERSION); } catch (e) { /* ignora */ }
+    }
+  }
+
+  function primoGiornoConServizi() {
+    const date = servizi.map((s) => s.data).filter(Boolean).sort();
+    return date.length ? date[0] : null;
   }
 
   // Selettori data+ora personalizzati (al posto dei picker nativi del browser).
@@ -92,6 +131,7 @@
   //  Eventi e navigazione
   // ============================================================
   function bindEventi() {
+    $("#tab-servizi").addEventListener("click", () => mostraVista("servizi"));
     $("#tab-cerca").addEventListener("click", () => mostraVista("cerca"));
     $("#tab-dipendenti").addEventListener("click", () => mostraVista("dipendenti"));
     $("#tab-calendario").addEventListener("click", () => mostraVista("calendario"));
@@ -126,23 +166,38 @@
     $("#btn-persona-x").addEventListener("click", chiudiPersona);
     $("#modal-persona").addEventListener("click", (e) => { if (e.target.id === "modal-persona") chiudiPersona(); });
 
+    $("#btn-servizio-x").addEventListener("click", chiudiServizio);
+    $("#modal-servizio").addEventListener("click", (e) => { if (e.target.id === "modal-servizio") chiudiServizio(); });
+
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { chiudiModale(); chiudiImpegni(); chiudiPwd(); chiudiPersona(); }
+      if (e.key === "Escape") { chiudiModale(); chiudiImpegni(); chiudiPwd(); chiudiPersona(); chiudiServizio(); }
     });
 
     $("#cal-prev").addEventListener("click", () => cambiaMese(-1));
     $("#cal-next").addEventListener("click", () => cambiaMese(1));
     $("#cal-oggi").addEventListener("click", vaiAOggi);
+
+    // Vista Servizi
+    $("#srv-prev").addEventListener("click", () => cambiaMeseServizi(-1));
+    $("#srv-next").addEventListener("click", () => cambiaMeseServizi(1));
+    $("#srv-att").addEventListener("change", (e) => { srvFiltroAtt = e.target.value; renderServizi(); });
+    $("#srv-modo-mese").addEventListener("click", () => cambiaModoServizi("mese"));
+    $("#srv-modo-timeline").addEventListener("click", () => cambiaModoServizi("timeline"));
+    $("#srv-assegna").addEventListener("click", onAssegnaRisorse);
+    $("#srv-pulisci").addEventListener("click", onPulisciAssegnazioni);
   }
 
   function mostraVista(quale) {
+    $("#view-servizi").hidden = quale !== "servizi";
     $("#view-cerca").hidden = quale !== "cerca";
     $("#view-dipendenti").hidden = quale !== "dipendenti";
     $("#view-calendario").hidden = quale !== "calendario";
+    $("#tab-servizi").classList.toggle("active", quale === "servizi");
     $("#tab-cerca").classList.toggle("active", quale === "cerca");
     $("#tab-dipendenti").classList.toggle("active", quale === "dipendenti");
     $("#tab-calendario").classList.toggle("active", quale === "calendario");
     if (quale === "cerca") setTimeout(() => map.invalidateSize(), 100);
+    else if (quale === "servizi") renderServizi();
     else if (quale === "dipendenti") renderListaDipendenti($("#cerca-dip").value);
     else if (quale === "calendario") renderCalendario();
   }
@@ -649,7 +704,7 @@
     if (p1 !== p2) return setStato(stato, "Le due password non coincidono.", "errore");
     setStato(stato, "Cifro i dati…", "");
     try {
-      const payload = { seed: dipendenti, mansioni: GL.data.mansioni() };
+      const payload = { seed: dipendenti, mansioni: GL.data.mansioni(), servizi: servizi.map(scartaAssegnati) };
       const blob = await GL.auth.cifra(p1, payload);
       const contenuto =
         "/* File CIFRATO (AES-256) — sicuro da pubblicare online. Generato dall'app. */\n" +
@@ -782,11 +837,593 @@
   function chiudiPersona() { $("#modal-persona").hidden = true; }
 
   // ============================================================
+  //  Servizi (calendario dei lavori — logica ribaltata: parte dal servizio)
+  // ============================================================
+  // Toglie il campo runtime "assegnati" prima di cifrare/pubblicare.
+  function scartaAssegnati(s) { const { assegnati, ...rest } = s; return rest; }
+
+  // Prepara le parti statiche della vista (una volta sola): legenda e filtri.
+  function initServizi() {
+    renderLegendaServizi();
+    renderFiltriCategoria();
+    const sel = $("#srv-att");
+    const opts = GL.servizi.attivitaDistinte(servizi)
+      .map((a) => `<option value="${esc(a)}">${esc(a)}</option>`)
+      .join("");
+    sel.innerHTML = `<option value="">Tutte</option>` + opts;
+    renderServizi();
+  }
+
+  function renderLegendaServizi() {
+    $("#srv-legenda").innerHTML = GL.servizi.CATEGORIE
+      .map((c) => `
+        <span class="srv-leg srv-cat-${c.id}" title="${esc(c.desc)}">
+          <span class="srv-leg-dot"></span>
+          <b>${esc(c.nome)}</b><span class="srv-leg-desc"> — ${esc(c.desc)}</span>
+        </span>`)
+      .join("");
+  }
+
+  function renderFiltriCategoria() {
+    const cont = $("#srv-filtri-cat");
+    const chip = (id, nome) =>
+      `<button class="srv-chip ${id ? "srv-cat-" + id : ""} ${srvFiltroCat === id ? "on" : ""}" data-cat="${id || ""}">${esc(nome)}</button>`;
+    cont.innerHTML =
+      chip(null, "Tutte") + GL.servizi.CATEGORIE.map((c) => chip(c.id, c.nome)).join("");
+    cont.querySelectorAll(".srv-chip").forEach((b) => {
+      b.addEventListener("click", () => {
+        srvFiltroCat = b.dataset.cat || null;
+        renderFiltriCategoria();
+        renderServizi();
+      });
+    });
+  }
+
+  function cambiaMeseServizi(delta) {
+    srvMese += delta;
+    if (srvMese < 0) { srvMese = 11; srvAnno--; }
+    else if (srvMese > 11) { srvMese = 0; srvAnno++; }
+    // Se il giorno selezionato non è più nel mese mostrato, deselezionalo.
+    if (srvGiornoSel && !srvGiornoSel.startsWith(`${srvAnno}-${due(srvMese + 1)}`)) srvGiornoSel = null;
+    renderServizi();
+  }
+
+  function due(n) { return String(n).padStart(2, "0"); }
+
+  // Un servizio passa i filtri correnti (categoria + attività)?
+  function passaFiltri(s) {
+    if (srvFiltroCat && s.cat !== srvFiltroCat) return false;
+    if (srvFiltroAtt && s.attivita !== srvFiltroAtt) return false;
+    return true;
+  }
+
+  function cambiaModoServizi(modo) {
+    srvModo = modo;
+    $("#srv-modo-mese").classList.toggle("active", modo === "mese");
+    $("#srv-modo-timeline").classList.toggle("active", modo === "timeline");
+    $("#srv-vista-mese").hidden = modo !== "mese";
+    $("#srv-vista-timeline").hidden = modo !== "timeline";
+    renderServizi();
+  }
+
+  function renderServizi() {
+    $("#srv-titolo").textContent = GL.impegni.nomeMese(srvMese) + " " + srvAnno;
+    renderRiepilogoServizi();
+    if (srvModo === "timeline") {
+      renderTimeline();
+    } else {
+      renderGrigliaServizi();
+      renderDettaglioServizi();
+    }
+    renderScoperti();
+  }
+
+  // Colonna a destra: riepilogo dei lavori scoperti (mancano risorse) nel mese,
+  // rispettando i filtri correnti, raggruppati per giorno.
+  function renderScoperti() {
+    const cont = $("#srv-scoperti");
+    const mese = `${srvAnno}-${due(srvMese + 1)}`;
+    const scoperti = servizi
+      .filter((s) => s.data && s.data.startsWith(mese) && passaFiltri(s))
+      .map((s) => ({ s, manca: s.risorse - Math.min((s.assegnati || []).length, s.risorse) }))
+      .filter((x) => x.manca > 0);
+
+    const totManca = scoperti.reduce((t, x) => t + x.manca, 0);
+    let html =
+      `<div class="sc-head">` +
+        `<h3>Lavori scoperti</h3>` +
+        `<span class="sc-kpi ${totManca ? "warn" : "ok"}">${totManca ? "⚠️ " + totManca + " risorse mancanti" : "✅ tutto coperto"}</span>` +
+      `</div>`;
+
+    if (!scoperti.length) {
+      html += `<p class="sc-vuoto">Nessun lavoro scoperto in ${GL.impegni.nomeMese(srvMese)}${srvFiltroCat || srvFiltroAtt ? " con i filtri attuali" : ""}. 🎉</p>`;
+      cont.innerHTML = html;
+      return;
+    }
+
+    // Raggruppa per giorno.
+    const perGiorno = {};
+    scoperti.forEach((x) => { (perGiorno[x.s.data] = perGiorno[x.s.data] || []).push(x); });
+    const giorni = Object.keys(perGiorno).sort();
+
+    html += giorni.map((g) => {
+      const items = perGiorno[g].sort((a, b) => b.manca - a.manca);
+      const mancaGiorno = items.reduce((t, x) => t + x.manca, 0);
+      const righe = items.map(({ s, manca }) => {
+        const cat = GL.servizi.catMeta(s.cat);
+        return `
+          <button class="sc-item srv-cat-${s.cat}" data-srv="${s.id}" title="Apri il dettaglio del servizio">
+            <span class="sc-item-dot"></span>
+            <span class="sc-item-txt">
+              <span class="sc-item-cli">${esc(s.cliente)}</span>
+              <span class="sc-item-sub">${esc(s.attivita)}${s.ora ? " · " + esc(s.ora) : ""}</span>
+            </span>
+            <span class="sc-item-manca">−${manca}</span>
+          </button>`;
+      }).join("");
+      return `
+        <div class="sc-giorno">
+          <div class="sc-giorno-tit"><b>${esc(GL.impegni.formattaData(g))}</b><span>${mancaGiorno} mancanti</span></div>
+          ${righe}
+        </div>`;
+    }).join("");
+
+    cont.innerHTML = html;
+    cont.querySelectorAll(".sc-item[data-srv]").forEach((b) => {
+      b.addEventListener("click", () => {
+        srvGiornoSel = servizi.find((s) => s.id === b.dataset.srv)?.data || srvGiornoSel;
+        apriServizio(b.dataset.srv);
+      });
+    });
+  }
+
+  // ---- Assegnazione automatica delle risorse ai lavori ----
+  function dipById(id) { return dipendenti.find((d) => d.id === id) || null; }
+
+  const CONTRATTO_ORE_DEFAULT = 40; // monte ore settimanale se il dipendente non lo indica
+  // Durata stimata di un servizio per tipo di attività (l'Excel non ha l'ora di fine).
+  // Valori realistici e volutamente contenuti: così una persona può incastrare più
+  // lavori nella giornata restando entro il proprio monte ore settimanale.
+  const DURATE_ATTIVITA = {
+    "Pulizie": 2,
+    "Facchinaggio": 3,
+    "Montaggio": 4,
+    "Magazziniere": 4,
+    "Confezionamento": 3,
+    "Assist. ascensori": 3,
+    "Assistenza": 2,
+  };
+  const ORE_SERVIZIO_DEFAULT = 3;
+  function oraInMin(hhmm) {
+    if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return null;
+    const [h, m] = hhmm.split(":").map(Number);
+    return h * 60 + m;
+  }
+  // Durata del servizio in ore: esatta se c'è l'ora di fine (inserita nel gestionale),
+  // altrimenti stima per tipo di attività.
+  function durataServizio(s) {
+    const inizio = oraInMin(s.ora), fine = oraInMin(s.oraFine);
+    if (inizio != null && fine != null && fine > inizio) return (fine - inizio) / 60;
+    return DURATE_ATTIVITA[s.attivita] || ORE_SERVIZIO_DEFAULT;
+  }
+  // È stata inserita un'ora di fine valida per questo servizio?
+  function haOraFine(s) {
+    const inizio = oraInMin(s.ora), fine = oraInMin(s.oraFine);
+    return inizio != null && fine != null && fine > inizio;
+  }
+
+  // Intervallo orario occupato da un servizio, in minuti dall'inizio giornata.
+  // Se manca l'ora di inizio, il servizio è "non temporizzato" e occupa tutto il giorno.
+  function intervalloServizio(s) {
+    if (!s.ora || !/^\d{1,2}:\d{2}$/.test(s.ora)) return { start: 0, end: 1440, untimed: true };
+    const [h, m] = s.ora.split(":").map(Number);
+    const start = h * 60 + m;
+    return { start, end: start + durataServizio(s) * 60, untimed: false };
+  }
+  // Due intervalli si sovrappongono? (i non temporizzati sono in conflitto per prudenza)
+  function sovrappone(a, b) {
+    if (a.untimed || b.untimed) return true;
+    return a.start < b.end && b.start < a.end;
+  }
+  function contrattoOre(d) {
+    const v = parseFloat(d.orarioContrattuale);
+    return v && !isNaN(v) ? v : CONTRATTO_ORE_DEFAULT;
+  }
+
+  // Assegna a ogni servizio le risorse richieste: mansione compatibile, senza
+  // sovrapposizioni di orario nello stesso giorno e senza superare il MONTE ORE
+  // SETTIMANALE del dipendente; bilancia il carico.
+  function assegnaAutomatico({ soloVuoti = true, salva = true } = {}) {
+    const occ = {};       // "YYYY-MM-DD" -> Map(idDip -> [intervalli])
+    const oreSett = {};   // idDip -> { "lunedìISO" -> ore assegnate quella settimana }
+
+    if (!soloVuoti) servizi.forEach((s) => { s.assegnati = []; });
+    // Semina lo stato con le assegnazioni già presenti (che vogliamo mantenere).
+    servizi.forEach((s) => {
+      if (!s.data) return;
+      const iv = intervalloServizio(s);
+      const wk = GL.impegni.lunediISO(s.data);
+      const mappa = occ[s.data] = occ[s.data] || new Map();
+      const dur = durataServizio(s);
+      (s.assegnati || []).forEach((id) => {
+        (mappa.get(id) || mappa.set(id, []).get(id)).push(iv);
+        (oreSett[id] = oreSett[id] || {})[wk] = (oreSett[id]?.[wk] || 0) + dur;
+      });
+    });
+
+    const ordinati = servizi.slice().sort(ordineAssegnazione);
+    ordinati.forEach((s) => {
+      if (!s.data) return;
+      s.assegnati = s.assegnati || [];
+      if (s.assegnati.length >= s.risorse) return;
+      const iv = intervalloServizio(s);
+      const dur = durataServizio(s);
+      const wk = GL.impegni.lunediISO(s.data);
+      const mappa = occ[s.data] = occ[s.data] || new Map();
+
+      const candidati = GL.servizi.candidatiPerAttivita(dipendenti, s.attivita)
+        .filter((d) => !s.assegnati.includes(d.id))
+        // niente sovrapposizioni di orario nello stesso giorno
+        .filter((d) => !(mappa.get(d.id) || []).some((x) => sovrappone(x, iv)))
+        // rispetta il monte ore settimanale
+        .filter((d) => (oreSett[d.id]?.[wk] || 0) + dur <= contrattoOre(d) + 0.001)
+        // preferisci chi ha usato meno ore nella settimana (bilanciamento)
+        .sort((a, b) => (oreSett[a.id]?.[wk] || 0) - (oreSett[b.id]?.[wk] || 0));
+
+      for (const d of candidati) {
+        if (s.assegnati.length >= s.risorse) break;
+        s.assegnati.push(d.id);
+        (mappa.get(d.id) || mappa.set(d.id, []).get(d.id)).push(iv);
+        (oreSett[d.id] = oreSett[d.id] || {})[wk] = (oreSett[d.id]?.[wk] || 0) + dur;
+      }
+    });
+    if (salva) GL.servizi.salvaAssegnazioni(servizi);
+  }
+
+  // Ordine di priorità nell'assegnazione: prima per data, poi per categoria
+  // (fisso mensile prima), poi i lavori che chiedono più persone.
+  function ordineAssegnazione(a, b) {
+    if (a.data !== b.data) return (a.data || "9999").localeCompare(b.data || "9999");
+    const pr = { verde: 0, azzurro: 1, viola: 2, bianco: 3 };
+    const pa = pr[a.cat] ?? 9, pb = pr[b.cat] ?? 9;
+    if (pa !== pb) return pa - pb;
+    return (b.risorse || 0) - (a.risorse || 0);
+  }
+
+  function onAssegnaRisorse() {
+    assegnaAutomatico({ soloVuoti: true, salva: true });
+    renderServizi();
+    const done = servizi.reduce((t, s) => t + Math.min((s.assegnati || []).length, s.risorse), 0);
+    const tot = servizi.reduce((t, s) => t + s.risorse, 0);
+    flashRiepilogo(`✅ Assegnate ${done}/${tot} risorse`);
+  }
+
+  function onPulisciAssegnazioni() {
+    if (!confirm("Rimuovere tutte le assegnazioni fatte?")) return;
+    servizi.forEach((s) => { s.assegnati = []; });
+    GL.servizi.salvaAssegnazioni(servizi);
+    renderServizi();
+  }
+
+  // Messaggio temporaneo accanto al riepilogo.
+  let flashTimer = null;
+  function flashRiepilogo(testo) {
+    const el = document.createElement("span");
+    el.className = "srv-flash";
+    el.textContent = testo;
+    $("#srv-riepilogo").appendChild(el);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => el.remove(), 3500);
+  }
+
+  function renderRiepilogoServizi() {
+    const delMese = servizi.filter((s) => s.data && s.data.startsWith(`${srvAnno}-${due(srvMese + 1)}`) && passaFiltri(s));
+    const nServ = delMese.length;
+    const nRis = delMese.reduce((t, s) => t + (s.risorse || 0), 0);
+    $("#srv-riepilogo").innerHTML =
+      `<span class="srv-kpi"><b>${nServ}</b> servizi</span>` +
+      `<span class="srv-kpi"><b>${nRis}</b> risorse richieste</span>`;
+  }
+
+  function renderGrigliaServizi() {
+    const celle = GL.impegni.grigliaMese(srvAnno, srvMese);
+    $("#srv-griglia").innerHTML = celle
+      .map((iso) => {
+        if (!iso) return `<div class="srv-cella vuota"></div>`;
+        const lista = GL.servizi.delGiorno(servizi, iso).filter(passaFiltri);
+        const n = lista.length;
+        const cls = ["srv-cella"];
+        if (iso === srvGiornoSel) cls.push("sel");
+        if (!n) cls.push("scarico");
+        const conteggi = GL.servizi.contaPerCategoria(lista, iso);
+        const barre = GL.servizi.CATEGORIE
+          .filter((c) => conteggi[c.id] > 0)
+          .map((c) => `<span class="srv-bar srv-cat-${c.id}" style="flex:${conteggi[c.id]}" title="${esc(c.nome)}: ${conteggi[c.id]}"></span>`)
+          .join("");
+        return `
+        <div class="${cls.join(" ")}" data-iso="${iso}">
+          <div class="srv-cella-top">
+            <span class="srv-num">${Number(iso.split("-")[2])}</span>
+            ${n ? `<span class="srv-count">${n}</span>` : ""}
+          </div>
+          ${n ? `<div class="srv-barre">${barre}</div>` : `<span class="srv-lib">—</span>`}
+        </div>`;
+      })
+      .join("");
+    $("#srv-griglia").querySelectorAll(".srv-cella[data-iso]").forEach((el) => {
+      el.addEventListener("click", () => { srvGiornoSel = el.dataset.iso; renderServizi(); });
+    });
+  }
+
+  function renderDettaglioServizi() {
+    const cont = $("#srv-dettaglio");
+    if (!srvGiornoSel) {
+      cont.innerHTML = `<p class="vuoto">Seleziona un giorno per vedere i servizi.</p>`;
+      return;
+    }
+    const lista = GL.servizi.delGiorno(servizi, srvGiornoSel).filter(passaFiltri);
+    const totRis = lista.reduce((t, s) => t + (s.risorse || 0), 0);
+    let html = `<h3>${GL.impegni.formattaData(srvGiornoSel)} · <span class="srv-sum">${lista.length} servizi · ${totRis} risorse</span></h3>`;
+    if (!lista.length) {
+      html += `<p class="vuoto">Nessun servizio in questa data con i filtri attuali.</p>`;
+      cont.innerHTML = html;
+      return;
+    }
+    html += `<div class="srv-lista">` + lista.map(cardServizio).join("") + `</div>`;
+    cont.innerHTML = html;
+    cont.querySelectorAll(".srv-card[data-srv]").forEach((card) => {
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("button[data-trova]")) return; // il bottone ha la sua azione
+        apriServizio(card.dataset.srv);
+      });
+    });
+    cont.querySelectorAll("button[data-trova]").forEach((b) => {
+      b.addEventListener("click", (e) => { e.stopPropagation(); trovaPersonaleServizio(b.dataset.trova); });
+    });
+  }
+
+  function cardServizio(s) {
+    const cat = GL.servizi.catMeta(s.cat);
+    const nAss = (s.assegnati || []).length;
+    const completo = nAss >= s.risorse;
+    const ora = s.ora ? `⏰ ${esc(s.ora)}` : `⏰ <i>orario da definire</i>`;
+    const soc = s.societa ? `<div class="srv-rowline">🏢 ${esc(s.societa)}</div>` : "";
+    const note = s.note ? `<div class="srv-rowline srv-note">📝 ${esc(s.note)}</div>` : "";
+    return `
+      <div class="srv-card srv-cat-${s.cat}" data-srv="${s.id}" title="Apri il dettaglio del servizio">
+        <div class="srv-card-stripe"></div>
+        <div class="srv-card-body">
+          <div class="srv-card-top">
+            <span class="srv-cliente">${esc(s.cliente)}</span>
+            <span class="srv-badge srv-cat-${s.cat}">${esc(cat.nome)}</span>
+          </div>
+          <div class="srv-rowline"><span class="srv-att">${esc(s.attivita)}</span> · ${ora}</div>
+          <div class="srv-rowline">📍 ${esc(s.indirizzo || "indirizzo da definire")}</div>
+          ${soc}${note}
+          ${avatarsAssegnati(s)}
+          <div class="srv-card-foot">
+            <span class="srv-risorse ${completo ? "ok" : ""}">👥 ${nAss}/${s.risorse} risorse assegnate</span>
+            <button class="btn ghost" data-trova="${s.id}">🔎 Trova personale</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Riga con gli avatar dei dipendenti assegnati al servizio (+ eventuali mancanti).
+  function avatarsAssegnati(s) {
+    const ass = (s.assegnati || []).map(dipById).filter(Boolean);
+    const mancano = Math.max(0, s.risorse - ass.length);
+    if (!ass.length && !mancano) return "";
+    const chips = ass
+      .map((d) => `<span class="srv-av" style="background:hsl(${tonoPersona(d.nome)} 58% 52%)" title="${esc(d.nome)}">${esc(iniziali(d.nome))}</span>`)
+      .join("");
+    const vuoti = Array.from({ length: mancano })
+      .map(() => `<span class="srv-av vuoto" title="Risorsa da assegnare">?</span>`)
+      .join("");
+    return `<div class="srv-avatars">${chips}${vuoti}</div>`;
+  }
+
+  // ---- Modalità Timeline (Gantt): righe = cliente, colonne = giorni ----
+  function renderTimeline() {
+    const cont = $("#srv-vista-timeline");
+    const giorniNelMese = new Date(srvAnno, srvMese + 1, 0).getDate();
+    const giorni = [];
+    for (let g = 1; g <= giorniNelMese; g++) {
+      const d = new Date(srvAnno, srvMese, g);
+      const dow = ["D", "L", "M", "M", "G", "V", "S"][d.getDay()];
+      const weekend = d.getDay() === 0 || d.getDay() === 6;
+      giorni.push({ g, iso: GL.impegni.iso(d), dow, weekend });
+    }
+    const N = giorni.length;
+    const colTempl = `repeat(${N}, 46px)`;
+
+    // Servizi del mese che passano i filtri, raggruppati per cliente.
+    const mese = `${srvAnno}-${due(srvMese + 1)}`;
+    const delMese = servizi.filter((s) => s.data && s.data.startsWith(mese) && passaFiltri(s));
+    const perCliente = {};
+    delMese.forEach((s) => { (perCliente[s.cliente] = perCliente[s.cliente] || []).push(s); });
+    const clienti = Object.keys(perCliente).sort((a, b) => a.localeCompare(b));
+
+    if (!clienti.length) {
+      cont.innerHTML = `<p class="vuoto">Nessun servizio in ${GL.impegni.nomeMese(srvMese)} ${srvAnno} con i filtri attuali.</p>`;
+      return;
+    }
+
+    // Intestazione: angolo + una cella per giorno.
+    const headCelle = giorni
+      .map((d) => `<div class="tl-h ${d.weekend ? "we" : ""}"><b>${d.g}</b><span>${d.dow}</span></div>`)
+      .join("");
+    let html =
+      `<div class="tl-scroll"><div class="tl">` +
+      `<div class="tl-headrow">` +
+        `<div class="tl-corner">CLIENTE / CANTIERE</div>` +
+        `<div class="tl-headtrack" style="grid-template-columns:${colTempl}">${headCelle}</div>` +
+      `</div>`;
+
+    clienti.forEach((cli) => {
+      const lanes = disponiInCorsie(perCliente[cli]);
+      const nLane = Math.max(1, lanes.length);
+      // Sfondo: una cella per giorno che copre tutte le corsie.
+      const bg = giorni
+        .map((d) => `<div class="tl-bg ${d.weekend ? "we" : ""}" style="grid-column:${d.g};grid-row:1/${nLane + 1}"></div>`)
+        .join("");
+      const barre = [];
+      lanes.forEach((lane, li) => {
+        lane.forEach((s) => {
+          const giorno = Number(s.data.split("-")[2]);
+          const nAss = Math.min((s.assegnati || []).length, s.risorse);
+          const completo = nAss >= s.risorse;
+          const et = `${s.attivita}${s.ora ? " " + s.ora : ""} · ${nAss}/${s.risorse}👥`;
+          barre.push(
+            `<div class="tl-bar srv-cat-${s.cat} ${completo ? "ok" : "manca"}" style="grid-column:${giorno};grid-row:${li + 1}" data-srv="${s.id}" title="${esc(cli)} — ${esc(et)}"><span>${esc(et)}</span></div>`
+          );
+        });
+      });
+      html +=
+        `<div class="tl-row">` +
+          `<div class="tl-cli" title="${esc(cli)}">${esc(cli)}</div>` +
+          `<div class="tl-track" style="grid-template-columns:${colTempl};grid-template-rows:repeat(${nLane}, 26px)">${bg}${barre.join("")}</div>` +
+        `</div>`;
+    });
+    html += `</div></div>`;
+    cont.innerHTML = html;
+    cont.querySelectorAll(".tl-bar[data-srv]").forEach((el) => {
+      el.addEventListener("click", () => apriServizio(el.dataset.srv));
+    });
+  }
+
+  // Distribuisce i servizi di un cliente in corsie così che due lavori nello
+  // stesso giorno non si sovrappongano (una corsia = un servizio per giorno).
+  function disponiInCorsie(lista) {
+    const ordinati = lista.slice().sort((a, b) => (a.data || "").localeCompare(b.data || ""));
+    const lanes = [];
+    ordinati.forEach((s) => {
+      let lane = lanes.find((L) => !L.some((x) => x.data === s.data));
+      if (!lane) { lane = []; lanes.push(lane); }
+      lane.push(s);
+    });
+    return lanes;
+  }
+
+  // Modale dettaglio servizio: mostra le risorse assegnate con NOME COMPLETO.
+  function apriServizio(id) {
+    const s = servizi.find((x) => x.id === id);
+    if (!s) return;
+    const cat = GL.servizi.catMeta(s.cat);
+    const ass = (s.assegnati || []).map(dipById).filter(Boolean);
+    const mancano = Math.max(0, s.risorse - ass.length);
+    const completo = mancano === 0;
+
+    const righeDip = ass
+      .map((d) => `
+        <div class="sd-dip">
+          <span class="cal-avatar" style="background:hsl(${tonoPersona(d.nome)} 58% 52%)">${esc(iniziali(d.nome))}</span>
+          <div class="sd-dip-info">
+            <div class="sd-dip-nome">${esc(d.nome)}</div>
+            <div class="sd-dip-meta">${esc(d.mansioni[0] || "—")}${d.telefono ? " · 📞 " + esc(d.telefono) : ""}</div>
+            <div class="sd-dip-meta">🏠 ${esc(d.indirizzo || "—")}</div>
+          </div>
+        </div>`)
+      .join("");
+    const righeVuote = Array.from({ length: mancano })
+      .map(() => `
+        <div class="sd-dip vuoto">
+          <span class="cal-avatar sd-av-vuoto">?</span>
+          <div class="sd-dip-info"><div class="sd-dip-nome">Risorsa da assegnare</div>
+          <div class="sd-dip-meta">nessun dipendente libero (mansione, orario o monte ore settimanale)</div></div>
+        </div>`)
+      .join("");
+
+    const durata = durataServizio(s);
+    const durataTxt = haOraFine(s)
+      ? `durata ${oreLabel(durata)}`
+      : `durata stimata ${oreLabel(durata)}`;
+    const oraLine = s.ora
+      ? `⏰ Inizio <b>${esc(s.ora)}</b> · Fine
+         <input type="time" id="sd-orafine" class="sd-orafine" value="${esc(s.oraFine || "")}" />
+         <span class="sd-durata ${haOraFine(s) ? "reale" : ""}">${durataTxt}</span>`
+      : `⏰ orario da definire`;
+
+    $("#servizio-dettaglio").innerHTML = `
+      <div class="sd-head">
+        <h2>${esc(s.cliente)}</h2>
+        <span class="srv-badge srv-cat-${s.cat}">${esc(cat.nome)}</span>
+      </div>
+      <div class="sd-riga"><span class="srv-att">${esc(s.attivita)}</span></div>
+      <div class="sd-riga sd-orario">${oraLine}</div>
+      <div class="sd-riga">📅 ${s.data ? GL.impegni.formattaData(s.data) : "data da definire"}</div>
+      <div class="sd-riga">📍 ${esc(s.indirizzo || "indirizzo da definire")}</div>
+      ${s.societa ? `<div class="sd-riga">🏢 ${esc(s.societa)}</div>` : ""}
+      ${s.note ? `<div class="sd-riga sd-note">📝 ${esc(s.note)}</div>` : ""}
+      <h3 class="sd-sub">Risorse assegnate <span class="srv-risorse ${completo ? "ok" : ""}">${ass.length}/${s.risorse}</span></h3>
+      <div class="sd-dips">${righeDip || ""}${righeVuote}</div>
+      <div class="modal-actions">
+        <button id="sd-trova" type="button" class="btn primary">🔎 Trova / cambia personale</button>
+      </div>`;
+    $("#sd-trova").addEventListener("click", () => { chiudiServizio(); trovaPersonaleServizio(s.id); });
+    const inpFine = $("#sd-orafine");
+    if (inpFine) inpFine.addEventListener("change", () => onCambiaOraFine(s.id, inpFine.value));
+    $("#modal-servizio").hidden = false;
+  }
+  function chiudiServizio() { $("#modal-servizio").hidden = true; }
+
+  // Formatta le ore: 3 -> "3h", 2.5 -> "2h30".
+  function oreLabel(h) {
+    const H = Math.floor(h + 1e-9);
+    const M = Math.round((h - H) * 60);
+    return M ? `${H}h${String(M).padStart(2, "0")}` : `${H}h`;
+  }
+
+  // L'utente inserisce/aggiorna l'ora di fine di un servizio nel gestionale.
+  // Con la fine reale la durata diventa esatta → riassegno per rispettare il monte ore.
+  function onCambiaOraFine(id, valore) {
+    const s = servizi.find((x) => x.id === id);
+    if (!s) return;
+    const inizio = oraInMin(s.ora), fine = oraInMin(valore);
+    if (valore && (fine == null || inizio == null || fine <= inizio)) {
+      const el = $(".sd-durata");
+      if (el) { el.textContent = "⚠️ la fine deve essere dopo l'inizio"; el.classList.add("errore"); }
+      return;
+    }
+    servizi = servizi.map((x) => (x.id === id ? { ...x, oraFine: valore || "" } : x));
+    GL.servizi.salvaOreFine(servizi);
+    assegnaAutomatico({ soloVuoti: false, salva: true }); // ricalcola con le nuove durate
+    renderServizi();
+    apriServizio(id); // riapri aggiornato
+  }
+
+  // Ponte: dal servizio salta a "Cerca personale" con indirizzo, data/ora e mansioni precompilati.
+  function trovaPersonaleServizio(id) {
+    const s = servizi.find((x) => x.id === id);
+    if (!s) return;
+    mostraVista("cerca");
+
+    // Indirizzo: se è un link Maps non lo usiamo come testo di ricerca.
+    const indirizzoValido = s.indirizzo && !/^https?:\/\//i.test(s.indirizzo);
+    $("#input-indirizzo").value = indirizzoValido ? s.indirizzo : "";
+    lavoroSelezionato = null;
+    nascondiSuggerimenti();
+
+    // Data e ora del lavoro.
+    if (s.data) GL.datepicker.setValue($("#input-data"), s.data + "T" + (s.ora || "08:00"));
+
+    // Mansioni: spunta quelle che corrispondono all'attività del servizio.
+    const match = GL.servizi.mansioniPerAttivita(s.attivita, MANSIONI);
+    const boxes = Array.from($("#mansioni-richieste").querySelectorAll("input[type=checkbox]"));
+    if (match.length) boxes.forEach((b) => { b.checked = match.includes(b.value); });
+
+    const nota = `Servizio «${s.cliente}» — ${s.attivita}${s.ora ? " ore " + s.ora : ""}. ` +
+      (indirizzoValido ? "Premi «Consiglia personale»." : "Indirizzo non testuale: inseriscilo a mano, poi «Consiglia personale».");
+    setStato($("#form-stato"), nota, "");
+    $("#input-indirizzo").focus();
+  }
+
+  // ============================================================
   //  Utility
   // ============================================================
   function aggiornaStatoApp() {
     const sa = $("#stato-app");
-    if (sa) sa.textContent = `build 17 · ${dipendenti.length} dipendenti · ${MANSIONI.length} mansioni`;
+    if (sa) sa.textContent = `build 18 · ${dipendenti.length} dipendenti · ${servizi.length} servizi · ${MANSIONI.length} mansioni`;
   }
 
   function setStato(el, testo, classe) {

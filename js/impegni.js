@@ -116,6 +116,6 @@ GL.impegni = (function () {
     iso, oggiISO, adessoISO, dataParte, oraParte,
     occupatoIstante, impegnoIstante, occupatoGiorno, impegniGiorno,
     grigliaMese, formattaData, formattaDataOra, descrivi, nomeMese, nuovoId,
-    oreImpegno, orePerSettimana, settimaneSovraccarico, oreFmt,
+    oreImpegno, lunediISO, orePerSettimana, settimaneSovraccarico, oreFmt,
   };
 })();

@@ -3,6 +3,8 @@
 # Se pubblichi il sito (es. GitHub Pages), questo NON deve finire online:
 # l'app userà automaticamente i dati di esempio al suo posto.
 js/dipendenti-reali.js
+# Servizi reali (clienti, indirizzi cantieri): stessa logica GDPR/riservatezza.
+js/servizi-reali.js
 
 # File sorgente con dati personali
 *.xlsx
