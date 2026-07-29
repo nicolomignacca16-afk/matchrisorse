@@ -77,7 +77,10 @@ GL.impegni = (function () {
   function nuovoId() { return "i" + Date.now() + "-" + Math.floor(Math.random() * 10000); }
 
   // --- Calcolo ore assegnate per settimana (per gli alert sul contratto) ---
+  // Gli impegni che arrivano dai lavori portano già le ore reali (pause escluse):
+  // in quel caso si usa quel valore, altrimenti si calcola dalla durata.
   function oreImpegno(i) {
+    if (typeof i.ore === "number" && i.ore > 0) return i.ore;
     const ms = new Date(i.dal.length === 10 ? i.dal + "T00:00" : i.dal) -
                new Date(i.al.length === 10 ? i.al + "T00:00" : i.al);
     const ore = Math.abs(ms) / 3600000;
@@ -89,20 +92,20 @@ GL.impegni = (function () {
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
     return iso(d);
   }
-  // Mappa settimana(lunedì) -> ore totali assegnate (impegni attribuiti alla settimana d'inizio).
-  function orePerSettimana(dip) {
+  // Mappa settimana(lunedì) -> ore totali (impegni attribuiti alla settimana d'inizio).
+  function orePerSettimana(impegni) {
     const m = {};
-    (dip.impegni || []).forEach((i) => {
+    (impegni || []).forEach((i) => {
       const wk = lunediISO(dataParte(i.dal));
       m[wk] = (m[wk] || 0) + oreImpegno(i);
     });
     return m;
   }
-  // Settimane in cui le ore superano quelle contrattuali.
-  function settimaneSovraccarico(dip) {
-    const contr = parseFloat(dip.orarioContrattuale);
+  // Settimane in cui le ore superano quelle contrattuali (contrattuali: numero o "").
+  function settimaneSovraccarico(impegni, contrattuali) {
+    const contr = parseFloat(contrattuali);
     if (!contr || isNaN(contr)) return [];
-    const m = orePerSettimana(dip);
+    const m = orePerSettimana(impegni);
     return Object.keys(m)
       .filter((wk) => m[wk] > contr + 0.001)
       .sort()

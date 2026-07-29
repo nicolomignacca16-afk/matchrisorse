@@ -7,7 +7,7 @@
 
   <!-- Mappe: Leaflet + OpenStreetMap (gratuito) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="styles.css?v=20260710b" />
+  <link rel="stylesheet" href="styles.css?v=20260728a" />
 </head>
 <body>
   <!-- Schermata di accesso (mostrata solo quando i dati sono cifrati, es. sito pubblicato) -->
@@ -31,25 +31,27 @@
       </div>
     </div>
     <nav class="tabs">
-      <button id="tab-servizi" class="tab active">Servizi</button>
+      <button id="tab-servizi" class="tab active">Lavori e calendario</button>
+      <button id="tab-economia" class="tab">Costi &amp; ricavi</button>
       <button id="tab-cerca" class="tab">Cerca personale</button>
       <button id="tab-dipendenti" class="tab">Dipendenti</button>
-      <button id="tab-calendario" class="tab">Calendario</button>
     </nav>
   </header>
 
   <main>
-    <!-- ===================== VISTA: SERVIZI (calendario dei lavori) ===================== -->
+    <!-- ============ VISTA: LAVORI E CALENDARIO (unica, 3 modalità) ============ -->
     <section id="view-servizi" class="view view-servizi">
       <div class="srv-top">
         <div class="srv-nav">
           <button id="srv-prev" class="btn ghost" title="Mese precedente">‹</button>
           <h2 id="srv-titolo">—</h2>
           <button id="srv-next" class="btn ghost" title="Mese successivo">›</button>
+          <button id="srv-oggi" class="btn ghost" title="Torna al mese e al giorno di oggi">Oggi</button>
         </div>
         <div class="srv-modi">
-          <button id="srv-modo-mese" class="srv-modo" data-modo="mese">🗓 Mese</button>
-          <button id="srv-modo-timeline" class="srv-modo active" data-modo="timeline">📊 Timeline</button>
+          <button id="srv-modo-timeline" class="srv-modo active" data-modo="timeline" title="Righe = cliente/cantiere, colonne = giorni">📊 Timeline</button>
+          <button id="srv-modo-mese" class="srv-modo" data-modo="mese" title="Calendario del mese con i lavori di ogni giorno">🗓 Calendario lavori</button>
+          <button id="srv-modo-persone" class="srv-modo" data-modo="persone" title="Calendario del mese con le persone impegnate ogni giorno">👥 Calendario persone</button>
         </div>
         <div id="srv-riepilogo" class="srv-riepilogo"></div>
       </div>
@@ -62,15 +64,15 @@
           Attività
           <select id="srv-att"><option value="">Tutte</option></select>
         </label>
-        <div class="srv-azioni">
-          <button id="srv-assegna" class="btn primary" title="Assegna in automatico le risorse richieste a ogni lavoro (per mansione e disponibilità)">⚙️ Assegna risorse</button>
-          <button id="srv-pulisci" class="btn ghost" title="Rimuovi tutte le assegnazioni">Pulisci</button>
-        </div>
+        <label class="srv-filtro-att">
+          Cliente
+          <select id="srv-cli"><option value="">Tutti</option></select>
+        </label>
       </div>
 
       <div class="srv-layout">
         <div class="srv-main">
-          <!-- Modalità MESE: calendario mensile + dettaglio giornata -->
+          <!-- Modalità CALENDARIO LAVORI: griglia del mese + dettaglio giornata -->
           <div class="srv-body" id="srv-vista-mese" hidden>
             <div class="srv-cal">
               <div class="cal-settimana">
@@ -83,12 +85,26 @@
 
           <!-- Modalità TIMELINE: righe = cliente, colonne = giorni, barre = lavori -->
           <div id="srv-vista-timeline" class="srv-timeline-wrap"></div>
+
+          <!-- Modalità CALENDARIO PERSONE: chi lavora, giorno per giorno -->
+          <div class="srv-body" id="srv-vista-persone" hidden>
+            <div class="srv-cal">
+              <div class="cal-settimana">
+                <span>Lun</span><span>Mar</span><span>Mer</span><span>Gio</span><span>Ven</span><span>Sab</span><span>Dom</span>
+              </div>
+              <div id="cal-griglia" class="cal-griglia"></div>
+            </div>
+            <div id="cal-dettaglio" class="cal-dettaglio"></div>
+          </div>
         </div>
 
-        <!-- Colonna riepilogo lavori scoperti (mancano risorse) -->
-        <aside id="srv-scoperti" class="srv-scoperti"></aside>
+        <!-- Colonna: lavori coperti da personale esterno / interinale -->
+        <aside id="srv-esterni" class="srv-scoperti"></aside>
       </div>
     </section>
+
+    <!-- ===================== VISTA: COSTI & RICAVI ===================== -->
+    <section id="view-economia" class="view view-economia" hidden></section>
 
     <!-- ===================== VISTA: CERCA PERSONALE ===================== -->
     <section id="view-cerca" class="view view-cerca" hidden>
@@ -142,21 +158,6 @@
       <div id="lista-dipendenti" class="lista-dipendenti"></div>
     </section>
 
-    <!-- ===================== VISTA: CALENDARIO ===================== -->
-    <section id="view-calendario" class="view view-calendario" hidden>
-      <div class="cal-top">
-        <button id="cal-prev" class="btn ghost" title="Mese precedente">‹</button>
-        <h2 id="cal-titolo">—</h2>
-        <button id="cal-next" class="btn ghost" title="Mese successivo">›</button>
-        <button id="cal-oggi" class="btn ghost">Oggi</button>
-        <span class="cal-legenda">Il numero indica quante persone sono occupate quel giorno. Clicca un giorno per i dettagli.</span>
-      </div>
-      <div class="cal-settimana">
-        <span>Lun</span><span>Mar</span><span>Mer</span><span>Gio</span><span>Ven</span><span>Sab</span><span>Dom</span>
-      </div>
-      <div id="cal-griglia" class="cal-griglia"></div>
-      <div id="cal-dettaglio" class="cal-dettaglio"></div>
-    </section>
   </main>
 
   <!-- ===================== MODALE: AGGIUNGI / MODIFICA DIPENDENTE ===================== -->
@@ -261,17 +262,20 @@
   <!-- Logica applicativa (script classici, nessun build necessario) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Dati cifrati (sito pubblicato). Manca finché non lo generi con "Proteggi sito": è normale. -->
-  <script src="js/dati-cifrati.js?v=20260710b"></script>
+  <script src="js/dati-cifrati.js?v=20260728a"></script>
   <!-- Dati in chiaro (solo locale, escluso dalla pubblicazione tramite .gitignore) -->
-  <script src="js/dipendenti-reali.js?v=20260710b"></script>
-  <!-- Servizi reali importati dall'Excel (anch'essi solo locali) -->
-  <script src="js/servizi-reali.js?v=20260710b"></script>
-  <script src="js/data.js?v=20260710b"></script>
-  <script src="js/geo.js?v=20260710b"></script>
-  <script src="js/impegni.js?v=20260710b"></script>
-  <script src="js/servizi.js?v=20260710b"></script>
-  <script src="js/datepicker.js?v=20260710b"></script>
-  <script src="js/auth.js?v=20260710b"></script>
-  <script src="js/app.js?v=20260710b"></script>
+  <script src="js/dipendenti-reali.js?v=20260728a"></script>
+  <!-- Lavori del mese importati dall'Excel (anch'essi solo locali) -->
+  <script src="js/servizi-reali.js?v=20260728a"></script>
+  <script src="js/data.js?v=20260728a"></script>
+  <script src="js/geo.js?v=20260728a"></script>
+  <script src="js/impegni.js?v=20260728a"></script>
+  <script src="js/servizi.js?v=20260728a"></script>
+  <script src="js/tariffe.js?v=20260728a"></script>
+  <script src="js/economia.js?v=20260728a"></script>
+  <script src="js/economia-view.js?v=20260728a"></script>
+  <script src="js/datepicker.js?v=20260728a"></script>
+  <script src="js/auth.js?v=20260728a"></script>
+  <script src="js/app.js?v=20260728a"></script>
 </body>
 </html>

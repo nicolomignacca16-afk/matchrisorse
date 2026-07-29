@@ -765,3 +765,111 @@ input:focus, select:focus {
   background: var(--glass-soft); border: 1px solid var(--bordo); padding: 3px 9px; border-radius: 999px; }
 .sd-durata.reale { color: var(--verde); background: var(--verde-chiaro); border-color: transparent; }
 .sd-durata.errore { color: var(--rosso); background: var(--rosso-chiaro); border-color: transparent; }
+
+/* ============================================================
+   Dettagli vista LAVORI: ore, esterni, calendario persone
+   ============================================================ */
+.srv-ore { font-size: 12px; font-weight: 700; color: var(--testo-soft);
+  background: var(--glass-soft); border: 1px solid var(--bordo); padding: 4px 10px; border-radius: 999px; }
+.srv-ore.manca { color: var(--ambra); background: var(--ambra-chiaro); border-color: transparent; }
+.srv-av.esterno { box-shadow: inset 0 0 0 2px #fff, 0 0 0 2px var(--ambra); }
+.sd-dip.esterna { border-style: dashed; }
+.cal-persona.esterna { border-style: dashed; }
+.cal-sum-ore { color: var(--indigo); }
+.pd-esterna { color: var(--ambra); font-weight: 700; }
+.sc-nota { font-size: 11.5px; color: var(--testo-soft); margin: 0 0 10px; line-height: 1.4; }
+.imp-sez { font-size: 12px; font-weight: 800; color: #334155; margin: 12px 0 6px;
+  text-transform: uppercase; letter-spacing: 0.03em; }
+.imp-riga.auto { opacity: 0.9; background: var(--glass-soft); }
+.imp-fonte { font-size: 11px; font-weight: 700; color: var(--grigio);
+  background: var(--glass-soft); border: 1px solid var(--bordo); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+
+/* ============================================================
+   Vista COSTI & RICAVI
+   ============================================================ */
+.view-economia { padding: 22px; overflow-y: auto; }
+.eco-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.eco-nav { display: flex; align-items: center; gap: 10px; }
+.eco-nav h2 { margin: 0; min-width: 190px; text-align: center; text-transform: capitalize; letter-spacing: -0.01em; }
+.eco-nav .btn { padding: 9px 15px; }
+.eco-sub { flex: 1; min-width: 220px; margin: 0; font-size: 12.5px; color: var(--testo-soft); line-height: 1.4; }
+.eco-avviso { margin: 0 0 14px; font-size: 12.5px; color: #92400e;
+  background: var(--ambra-chiaro); border: 1px solid rgba(217, 119, 6, 0.3);
+  padding: 9px 13px; border-radius: var(--radius-sm); }
+
+/* KPI */
+.eco-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.eco-card { padding: 14px 16px; border-radius: var(--radius); display: flex; flex-direction: column; gap: 3px;
+  background: var(--glass-card); border: 1px solid var(--bordo-glass); box-shadow: var(--ombra-soft); }
+.eco-card-tit { font-size: 12px; font-weight: 800; color: var(--testo-soft); text-transform: uppercase; letter-spacing: 0.03em; }
+.eco-card-val { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--testo); }
+.eco-card-vs { font-size: 17px; font-weight: 700; color: var(--testo-soft); }
+.eco-card-sub { font-size: 11.5px; color: var(--testo-soft); line-height: 1.35; }
+.eco-card.ricavi { border-left: 4px solid var(--verde); }
+.eco-card.ricavi .eco-card-val { color: #15803d; }
+.eco-card.costi { border-left: 4px solid var(--rosso); }
+.eco-card.costi .eco-card-val { color: #b91c1c; }
+.eco-card.margine { border-left: 4px solid var(--indigo); }
+.eco-card.margine.pos .eco-card-val { color: var(--indigo); }
+.eco-card.margine.neg .eco-card-val { color: #b91c1c; }
+.eco-card.info { border-left: 4px solid var(--srv-azzurro); }
+
+/* Layout: contenuto + colonna tariffe */
+.eco-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .eco-layout { grid-template-columns: 1fr; } }
+.eco-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.eco-side { position: sticky; top: 12px; }
+.eco-box { background: var(--glass-card); border: 1px solid var(--bordo-glass);
+  border-radius: var(--radius); box-shadow: var(--ombra-soft); padding: 16px; }
+.eco-box-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.eco-box-head h3 { margin: 0; font-size: 15px; letter-spacing: -0.01em; }
+
+/* Grafico giornaliero */
+.eco-leg { font-size: 12px; color: var(--testo-soft); display: inline-flex; align-items: center; gap: 6px; }
+.eco-leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.eco-leg i.ric, .eco-gbar.ric { background: var(--verde); }
+.eco-leg i.cos, .eco-gbar.cos { background: var(--rosso); }
+.eco-grafico { display: flex; align-items: flex-end; gap: 3px; height: 170px; overflow-x: auto; padding-bottom: 2px; }
+.eco-gcol { flex: 1 1 0; min-width: 18px; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.eco-gbars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.eco-gbar { width: 45%; border-radius: 3px 3px 0 0; opacity: 0.85; transition: opacity .12s; }
+.eco-gcol:hover .eco-gbar { opacity: 1; }
+.eco-gday { font-size: 10px; color: var(--testo-soft); }
+
+/* Tabelle di dettaglio */
+.eco-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px;
+  background: var(--glass-soft); border: 1px solid var(--bordo); }
+.eco-tab { cursor: pointer; border: none; background: transparent; color: var(--testo-soft);
+  font-weight: 700; font-size: 12.5px; padding: 6px 12px; border-radius: 999px; transition: all .12s; }
+.eco-tab:hover { color: var(--testo); }
+.eco-tab.on { background: #fff; color: var(--indigo); box-shadow: var(--ombra-soft); }
+.eco-tab-dati { width: 100%; border-collapse: collapse; font-size: 13px; }
+.eco-tab-dati th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--testo-soft); padding: 6px 8px; border-bottom: 1px solid var(--bordo); white-space: nowrap; }
+.eco-tab-dati td { padding: 7px 8px; border-bottom: 1px solid rgba(15, 23, 42, 0.05); }
+.eco-tab-dati tbody tr:hover { background: rgba(99, 102, 241, 0.06); }
+.eco-tab-dati .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.eco-tab-dati .pos { color: #15803d; font-weight: 700; }
+.eco-tab-dati .neg { color: #b91c1c; font-weight: 700; }
+.eco-nome { position: relative; min-width: 160px; max-width: 320px; }
+.eco-barra { position: absolute; left: 0; top: 4px; bottom: 4px; border-radius: 4px;
+  background: rgba(99, 102, 241, 0.14); z-index: 0; }
+.eco-nome-txt { position: relative; z-index: 1; font-weight: 600; }
+.eco-pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.eco-pill.int { color: var(--verde); background: var(--verde-chiaro); }
+.eco-pill.est { color: var(--ambra); background: var(--ambra-chiaro); }
+
+/* Pannello tariffe */
+.eco-tariffe .eco-campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.eco-tariffe .eco-campo > span { font-size: 12.5px; font-weight: 700; color: var(--testo); }
+.eco-tariffe .eco-campo small { font-size: 11px; color: var(--testo-soft); }
+.eco-tariffe input[type="number"] { border: 1px solid var(--bordo); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 14px; background: var(--glass-strong); color: var(--testo); width: 100%; }
+.eco-hint { font-size: 11.5px; color: var(--testo-soft); line-height: 1.4; margin: 0 0 12px; }
+.eco-reset { width: 100%; font-size: 12.5px; padding: 8px; }
+.eco-sub-tit { margin: 18px 0 6px; font-size: 13px; }
+.eco-clienti { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.eco-cli { display: flex; align-items: center; gap: 8px; }
+.eco-cli-nome { flex: 1; min-width: 0; font-size: 12.5px; color: var(--testo-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eco-cli-input { width: 82px !important; padding: 5px 8px !important; font-size: 12.5px !important; }
