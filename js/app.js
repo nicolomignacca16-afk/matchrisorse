@@ -22,7 +22,9 @@
   let srvFiltroCat = null;   // null = tutte le categorie
   let srvFiltroAtt = "";      // "" = tutte le attività
   let srvFiltroCli = "";      // "" = tutti i clienti
-  let srvModo = "timeline";   // "timeline" | "mese" | "persone"
+  let srvFiltroDip = "";      // "" = tutte le persone (chiave: id dipendente o "x:Nome")
+  let srvModo = "elenco";     // "elenco" | "timeline" | "mese" | "persone"
+  let srvPeriodo = null;      // Elenco: null = tutto il mese, oppure { dal, al } (date ISO incluse)
 
   document.addEventListener("DOMContentLoaded", bootstrap);
 
@@ -69,6 +71,12 @@
     renderListaDipendenti();
     initServizi();
     GL.economiaView.monta({ contenitore: $("#view-economia"), servizi: () => servizi });
+    GL.nuovoLavoro.monta({
+      dipendenti: () => dipendenti,
+      servizi: () => servizi,
+      mese: () => ({ anno: srvAnno, mese: srvMese }),
+      onSalvato: ricaricaServizi,
+    });
     aggiornaStatoApp();
   }
 
@@ -89,6 +97,16 @@
       localStorage.removeItem("gl_servizi_orefine_v1");
       localStorage.removeItem("gl_servizi_engine_v");
     } catch (e) { /* spazio non disponibile: ininfluente */ }
+  }
+
+  // Dopo un inserimento o una cancellazione: ricarica i lavori e tutto ciò che ne deriva.
+  function ricaricaServizi(giorno) {
+    servizi = GL.servizi.carica();
+    impDerivati = GL.servizi.impegniPerDipendente(servizi);
+    if (giorno) { srvGiornoSel = giorno; srvPeriodo = null; }
+    popolaFiltri();
+    renderServizi();
+    aggiornaStatoApp();
   }
 
   // --- Impegni di un dipendente: quelli inseriti a mano + quelli dai lavori ---
@@ -181,7 +199,7 @@
     $("#modal-servizio").addEventListener("click", (e) => { if (e.target.id === "modal-servizio") chiudiServizio(); });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { chiudiModale(); chiudiImpegni(); chiudiPwd(); chiudiPersona(); chiudiServizio(); }
+      if (e.key === "Escape") { chiudiModale(); chiudiImpegni(); chiudiPwd(); chiudiPersona(); chiudiServizio(); $("#modal-nuovo").hidden = true; }
     });
 
     // Vista Lavori (timeline / calendario lavori / calendario persone)
@@ -190,6 +208,9 @@
     $("#srv-oggi").addEventListener("click", vaiAOggi);
     $("#srv-att").addEventListener("change", (e) => { srvFiltroAtt = e.target.value; renderServizi(); });
     $("#srv-cli").addEventListener("change", (e) => { srvFiltroCli = e.target.value; renderServizi(); });
+    $("#srv-dip").addEventListener("change", (e) => { srvFiltroDip = e.target.value; renderServizi(); });
+    $("#srv-nuovo").addEventListener("click", () => GL.nuovoLavoro.apri());
+    $("#srv-modo-elenco").addEventListener("click", () => cambiaModoServizi("elenco"));
     $("#srv-modo-mese").addEventListener("click", () => cambiaModoServizi("mese"));
     $("#srv-modo-timeline").addEventListener("click", () => cambiaModoServizi("timeline"));
     $("#srv-modo-persone").addEventListener("click", () => cambiaModoServizi("persone"));
@@ -493,6 +514,14 @@
   }
 
   // --- Helper per il calendario "ricco" ---
+  // Quanti nomi stanno in una cella del calendario persone: oltre, "+N altri".
+  const MAX_NOMI_CELLA = 5;
+  // "Dario Murru" → "Dario M." (nome + iniziale dell'ultimo cognome).
+  function nomeBreve(nome) {
+    const parti = String(nome || "").trim().split(/\s+/);
+    return parti.length > 1 ? `${parti[0]} ${parti[parti.length - 1][0]}.` : parti[0] || "";
+  }
+
   function iniziali(nome) {
     const p = (nome || "").trim().split(/\s+/);
     const a = p[0] ? p[0][0] : "";
@@ -725,10 +754,12 @@
     if (p1 !== p2) return setStato(stato, "Le due password non coincidono.", "errore");
     setStato(stato, "Cifro i dati…", "");
     try {
+      // I lavori inseriti a mano entrano nel file come tutti gli altri (non più eliminabili dal sito
+      // pubblicato: per toglierli, eliminali qui e rigenera il file).
       const payload = {
         seed: dipendenti,
         mansioni: GL.data.mansioni(),
-        servizi,
+        servizi: servizi.map(({ manuale, ...s }) => s),
         tariffe: GL.tariffe.carica(),
       };
       const blob = await GL.auth.cifra(p1, payload);
@@ -759,19 +790,18 @@
   function renderCalendarioPersone() {
     const oggi = GL.impegni.oggiISO();
     const celle = GL.impegni.grigliaMese(srvAnno, srvMese);
-    const filtrati = servizi.filter(passaFiltri);
     $("#cal-griglia").innerHTML = celle
       .map((iso) => {
         if (!iso) return `<div class="cal-cella vuota"></div>`;
-        const persone = GL.servizi.personeGiorno(filtrati, iso);
+        const persone = personeGiornoFiltrate(iso);
         const n = persone.length;
         const cls = ["cal-cella", "lvl-" + livelloCarico(n)];
         if (iso === oggi) cls.push("oggi");
         if (iso === srvGiornoSel) cls.push("sel");
-        const chips = persone.slice(0, 4)
-          .map((p) => `<span class="cal-ini" style="background:hsl(${tonoPersona(p.nome)} 58% 52%)" title="${esc(p.nome)}">${esc(iniziali(p.nome))}</span>`)
+        const chips = persone.slice(0, MAX_NOMI_CELLA)
+          .map((p) => `<span class="cal-nome ${p.dipId ? "" : "esterna"}" title="${esc(p.nome)}">${esc(nomeBreve(p.nome))}</span>`)
           .join("");
-        const extra = n > 4 ? `<span class="cal-ini cal-ini-extra">+${n - 4}</span>` : "";
+        const extra = n > MAX_NOMI_CELLA ? `<span class="cal-nome cal-nome-extra">+${n - MAX_NOMI_CELLA} altri</span>` : "";
         return `
         <div class="${cls.join(" ")}" data-iso="${iso}">
           <div class="cal-cella-top">
@@ -791,13 +821,14 @@
   function renderDettaglioPersone() {
     const cont = $("#cal-dettaglio");
     if (!srvGiornoSel) { cont.innerHTML = ""; return; }
-    const filtrati = servizi.filter(passaFiltri);
-    const persone = GL.servizi.personeGiorno(filtrati, srvGiornoSel);
+    const persone = personeGiornoFiltrate(srvGiornoSel);
     const interni = persone.filter((p) => p.dipId).length;
     const liberi = dipendenti.length - interni;
     const ore = persone.reduce((t, p) => t + p.ore, 0);
+    // Con il filtro per persona il conteggio dei liberi non ha senso: lo si omette.
+    const liberiTxt = srvFiltroDip ? "" : ` · <span class="cal-sum-lib">${liberi} dipendenti liberi</span>`;
     let html = `<h3>${GL.impegni.formattaData(srvGiornoSel)} · <span class="cal-sum-occ">${persone.length} al lavoro</span>` +
-      ` · <span class="cal-sum-lib">${liberi} dipendenti liberi</span> · <span class="cal-sum-ore">${GL.impegni.oreFmt(ore)} totali</span></h3>`;
+      `${liberiTxt} · <span class="cal-sum-ore">${GL.impegni.oreFmt(ore)} totali</span></h3>`;
     if (!persone.length) {
       html += `<p class="vuoto">Nessun lavoro in questa data con i filtri attuali.</p>`;
     } else {
@@ -871,31 +902,29 @@
   // ============================================================
   // Prepara le parti statiche della vista (una volta sola): legenda e filtri.
   function initServizi() {
-    renderLegendaServizi();
     renderFiltriCategoria();
-    $("#srv-att").innerHTML = `<option value="">Tutte</option>` +
-      GL.servizi.attivitaDistinte(servizi).map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("");
-    $("#srv-cli").innerHTML = `<option value="">Tutti</option>` +
-      GL.servizi.clientiDistinti(servizi).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    popolaFiltri();
     renderServizi();
   }
 
-  function renderLegendaServizi() {
-    $("#srv-legenda").innerHTML = GL.servizi.CATEGORIE
-      .map((c) => `
-        <span class="srv-leg srv-cat-${c.id}" title="${esc(c.desc)}">
-          <span class="srv-leg-dot"></span>
-          <b>${esc(c.nome)}</b><span class="srv-leg-desc"> — ${esc(c.desc)}</span>
-        </span>`)
-      .join("");
+  // Tendine attività / cliente / dipendente ricavate dai lavori, mantenendo la scelta corrente.
+  function popolaFiltri() {
+    const opzioni = (vuoto, lista, scelta) => `<option value="">${vuoto}</option>` +
+      lista.map((o) => `<option value="${esc(o.valore)}" ${o.valore === scelta ? "selected" : ""}>${esc(o.testo)}</option>`).join("");
+    $("#srv-att").innerHTML = opzioni("Tutte", GL.servizi.attivitaDistinte(servizi).map((a) => ({ valore: a, testo: a })), srvFiltroAtt);
+    $("#srv-cli").innerHTML = opzioni("Tutti", GL.servizi.clientiDistinti(servizi).map((c) => ({ valore: c, testo: c })), srvFiltroCli);
+    const persone = GL.servizi.personeDistinte(servizi)
+      .map((p) => ({ valore: p.chiave, testo: (dipById(p.chiave) || p).nome }))
+      .sort((a, b) => a.testo.localeCompare(b.testo));
+    $("#srv-dip").innerHTML = opzioni("Tutti", persone, srvFiltroDip);
   }
 
   function renderFiltriCategoria() {
     const cont = $("#srv-filtri-cat");
-    const chip = (id, nome) =>
-      `<button class="srv-chip ${id ? "srv-cat-" + id : ""} ${srvFiltroCat === id ? "on" : ""}" data-cat="${id || ""}">${esc(nome)}</button>`;
+    const chip = (id, nome, desc) =>
+      `<button class="srv-chip ${id ? "srv-cat-" + id : ""} ${srvFiltroCat === id ? "on" : ""}" data-cat="${id || ""}" title="${esc(desc)}">${esc(nome)}</button>`;
     cont.innerHTML =
-      chip(null, "Tutte") + GL.servizi.CATEGORIE.map((c) => chip(c.id, c.nome)).join("");
+      chip(null, "Tutte", "Tutte le categorie") + GL.servizi.CATEGORIE.map((c) => chip(c.id, c.nome, c.desc)).join("");
     cont.querySelectorAll(".srv-chip").forEach((b) => {
       b.addEventListener("click", () => {
         srvFiltroCat = b.dataset.cat || null;
@@ -911,6 +940,7 @@
     else if (srvMese > 11) { srvMese = 0; srvAnno++; }
     // Se il giorno selezionato non è più nel mese mostrato, deselezionalo.
     if (srvGiornoSel && !srvGiornoSel.startsWith(`${srvAnno}-${due(srvMese + 1)}`)) srvGiornoSel = null;
+    srvPeriodo = null;
     renderServizi();
   }
 
@@ -919,6 +949,7 @@
     srvAnno = o.getFullYear();
     srvMese = o.getMonth();
     srvGiornoSel = GL.impegni.oggiISO();
+    srvPeriodo = { dal: srvGiornoSel, al: srvGiornoSel };
     renderServizi();
   }
 
@@ -929,15 +960,24 @@
     if (srvFiltroCat && s.cat !== srvFiltroCat) return false;
     if (srvFiltroAtt && s.attivita !== srvFiltroAtt) return false;
     if (srvFiltroCli && s.cliente !== srvFiltroCli) return false;
+    if (srvFiltroDip && !GL.servizi.haPersona(s, srvFiltroDip)) return false;
     return true;
   }
-  function filtriAttivi() { return Boolean(srvFiltroCat || srvFiltroAtt || srvFiltroCli); }
+  function filtriAttivi() { return Boolean(srvFiltroCat || srvFiltroAtt || srvFiltroCli || srvFiltroDip); }
+
+  // Persone al lavoro in un giorno, ristrette alla persona filtrata (se c'è).
+  function personeGiornoFiltrate(giorno) {
+    const persone = GL.servizi.personeGiorno(servizi.filter(passaFiltri), giorno);
+    return srvFiltroDip ? persone.filter((p) => p.chiave === srvFiltroDip) : persone;
+  }
 
   function cambiaModoServizi(modo) {
     srvModo = modo;
-    ["mese", "timeline", "persone"].forEach((m) => {
+    ["elenco", "mese", "timeline", "persone"].forEach((m) => {
       $("#srv-modo-" + m).classList.toggle("active", modo === m);
     });
+    $("#srv-periodo").hidden = modo !== "elenco";
+    $("#srv-vista-elenco").hidden = modo !== "elenco";
     $("#srv-vista-mese").hidden = modo !== "mese";
     $("#srv-vista-timeline").hidden = modo !== "timeline";
     $("#srv-vista-persone").hidden = modo !== "persone";
@@ -947,64 +987,53 @@
   function renderServizi() {
     $("#srv-titolo").textContent = GL.impegni.nomeMese(srvMese) + " " + srvAnno;
     renderRiepilogoServizi();
-    if (srvModo === "timeline") renderTimeline();
+    if (srvModo === "elenco") renderElenco();
+    else if (srvModo === "timeline") renderTimeline();
     else if (srvModo === "persone") renderCalendarioPersone();
     else { renderGrigliaServizi(); renderDettaglioServizi(); }
-    renderEsterni();
   }
 
-  // Colonna a destra: lavori coperti da personale esterno / interinale
-  // (nominativi non presenti in anagrafica), raggruppati per giorno.
-  function renderEsterni() {
-    const cont = $("#srv-esterni");
-    const delMese = GL.servizi.delMese(servizi, srvAnno, srvMese).filter(passaFiltri);
-    const conEsterni = delMese
-      .map((s) => ({ s, esterni: (s.persone || []).filter((p) => !p.id) }))
-      .filter((x) => x.esterni.length);
+  // Modalità Elenco: una riga per lavoro nel periodo scelto (filtri applicati).
+  function renderElenco() {
+    renderPeriodo();
+    const nelPeriodo = (s) => !srvPeriodo || (s.data >= srvPeriodo.dal && s.data <= srvPeriodo.al);
+    GL.elencoView.render({
+      contenitore: $("#srv-vista-elenco"),
+      lista: GL.servizi.delMese(servizi, srvAnno, srvMese).filter(passaFiltri).filter(nelPeriodo),
+      evidenzia: srvFiltroDip,
+      onApri: apriServizio,
+    });
+  }
 
-    const totEsterni = conEsterni.reduce((t, x) => t + x.esterni.length, 0);
-    const oreEsterne = conEsterni.reduce((t, x) => t + x.esterni.length * GL.servizi.orePersona(x.s), 0);
-    let html =
-      `<div class="sc-head">` +
-        `<h3>Coperti da esterni</h3>` +
-        `<span class="sc-kpi ${totEsterni ? "warn" : "ok"}">${totEsterni ? "⚠️ " + totEsterni + " turni · " + GL.impegni.oreFmt(oreEsterne) : "✅ tutto personale interno"}</span>` +
-      `</div>`;
+  // Striscia compatta del periodo: tutto il mese, una settimana o un giorno.
+  function renderPeriodo() {
+    const ultimo = new Date(srvAnno, srvMese + 1, 0).getDate();
+    const isoDi = (g) => `${srvAnno}-${due(srvMese + 1)}-${due(g)}`;
+    const attivo = (dal, al) => srvPeriodo && srvPeriodo.dal === dal && srvPeriodo.al === al;
+    const chip = (dal, al, testo, cls, tip) =>
+      `<button class="srv-pchip ${cls || ""} ${attivo(dal, al) ? "on" : ""}" data-dal="${dal}" data-al="${al}" title="${esc(tip || "")}">${testo}</button>`;
 
-    if (!conEsterni.length) {
-      html += `<p class="sc-vuoto">Nessun lavoro affidato a esterni in ${GL.impegni.nomeMese(srvMese)}${filtriAttivi() ? " con i filtri attuali" : ""}. 🎉</p>`;
-      cont.innerHTML = html;
-      return;
+    // Settimane lun→dom, ritagliate sul mese.
+    const settimane = [];
+    for (let g = 1; g <= ultimo; g += 7 - ((new Date(srvAnno, srvMese, g).getDay() + 6) % 7)) {
+      const dow = (new Date(srvAnno, srvMese, g).getDay() + 6) % 7;
+      const fine = Math.min(ultimo, g + (6 - dow));
+      settimane.push({ dal: isoDi(g), al: isoDi(fine), testo: `${g}–${fine}` });
     }
-    html += `<p class="sc-nota">Turni svolti da nominativi non presenti in anagrafica. Apri il lavoro e usa «Trova personale» per cercare una risorsa interna.</p>`;
-
-    const perGiorno = {};
-    conEsterni.forEach((x) => { (perGiorno[x.s.data] = perGiorno[x.s.data] || []).push(x); });
-    const giorni = Object.keys(perGiorno).sort();
-
-    html += giorni.map((g) => {
-      const items = perGiorno[g].sort((a, b) => b.esterni.length - a.esterni.length);
-      const nGiorno = items.reduce((t, x) => t + x.esterni.length, 0);
-      const righe = items.map(({ s, esterni }) => `
-          <button class="sc-item srv-cat-${s.cat}" data-srv="${s.id}" title="${esc(esterni.map((p) => p.n).join(", "))}">
-            <span class="sc-item-dot"></span>
-            <span class="sc-item-txt">
-              <span class="sc-item-cli">${esc(s.cliente)}</span>
-              <span class="sc-item-sub">${esc(s.attivita)}${s.ora ? " · " + esc(s.ora) : ""} — ${esc(esterni.map((p) => p.n).join(", "))}</span>
-            </span>
-            <span class="sc-item-manca">${esterni.length}</span>
-          </button>`).join("");
-      return `
-        <div class="sc-giorno">
-          <div class="sc-giorno-tit"><b>${esc(GL.impegni.formattaData(g))}</b><span>${nGiorno} esterni</span></div>
-          ${righe}
-        </div>`;
-    }).join("");
-
-    cont.innerHTML = html;
-    cont.querySelectorAll(".sc-item[data-srv]").forEach((b) => {
+    const giorni = [];
+    for (let g = 1; g <= ultimo; g++) {
+      const dow = new Date(srvAnno, srvMese, g).getDay();
+      giorni.push(chip(isoDi(g), isoDi(g), g, dow === 0 || dow === 6 ? "we" : "", isoDi(g)));
+    }
+    $("#srv-periodo").innerHTML =
+      `<span class="srv-plabel">Periodo</span>` +
+      `<button class="srv-pchip mese ${srvPeriodo ? "" : "on"}" data-dal="" data-al="">Tutto il mese</button>` +
+      `<span class="srv-pgroup">${settimane.map((w, i) => chip(w.dal, w.al, `S${i + 1}`, "sett", "Settimana " + w.testo)).join("")}</span>` +
+      `<span class="srv-pgroup">${giorni.join("")}</span>`;
+    $("#srv-periodo").querySelectorAll(".srv-pchip").forEach((b) => {
       b.addEventListener("click", () => {
-        srvGiornoSel = servizi.find((s) => s.id === b.dataset.srv)?.data || srvGiornoSel;
-        apriServizio(b.dataset.srv);
+        srvPeriodo = b.dataset.dal ? { dal: b.dataset.dal, al: b.dataset.al } : null;
+        renderServizi();
       });
     });
   }
@@ -1092,8 +1121,6 @@
     const oreTxt = GL.servizi.oreMancanti(s)
       ? `<span class="srv-ore manca" title="Ore non presenti nel file: inserisci l'ora di fine">ore da inserire</span>`
       : `<span class="srv-ore">${GL.impegni.oreFmt(GL.servizi.orePersona(s))} a testa · ${GL.impegni.oreFmt(GL.servizi.oreTotali(s))} totali</span>`;
-    const soc = s.societa ? `<div class="srv-rowline">🏢 ${esc(s.societa)}</div>` : "";
-    const note = s.note ? `<div class="srv-rowline srv-note">📝 ${esc(s.note)}</div>` : "";
     return `
       <div class="srv-card srv-cat-${s.cat}" data-srv="${s.id}" title="Apri il dettaglio del lavoro">
         <div class="srv-card-stripe"></div>
@@ -1103,8 +1130,6 @@
             <span class="srv-badge srv-cat-${s.cat}">${esc(cat.nome)}</span>
           </div>
           <div class="srv-rowline"><span class="srv-att">${esc(s.attivita)}</span> · ${ora}</div>
-          <div class="srv-rowline">📍 ${esc(s.indirizzo || "indirizzo da definire")}</div>
-          ${soc}${note}
           ${avatarsPersone(s)}
           <div class="srv-card-foot">
             <span class="srv-risorse ${esterni ? "" : "ok"}">👥 ${s.risorse} ${s.risorse === 1 ? "persona" : "persone"}${esterni ? ` · ${esterni} esterni` : ""}</span>
@@ -1115,13 +1140,10 @@
       </div>`;
   }
 
-  // Riga con gli avatar delle persone che svolgono il lavoro (esterni tratteggiati).
+  // Riga con i nomi delle persone che svolgono il lavoro (esterni sottolineati).
   function avatarsPersone(s) {
-    const persone = s.persone || [];
-    if (!persone.length) return "";
-    return `<div class="srv-avatars">` + persone
-      .map((p) => `<span class="srv-av ${p.id ? "" : "esterno"}" style="background:hsl(${tonoPersona(p.n)} 58% 52%)" title="${esc(p.n)}${p.id ? "" : " (esterno)"}">${esc(iniziali(p.n))}</span>`)
-      .join("") + `</div>`;
+    if (!(s.persone || []).length) return "";
+    return `<div class="srv-nomi">${GL.elencoView.personeHtml(s, srvFiltroDip)}</div>`;
   }
 
   // ---- Modalità Timeline (Gantt): righe = cliente, colonne = giorni ----
@@ -1261,9 +1283,17 @@
       </h3>
       <div class="sd-dips">${righePersone || '<p class="vuoto">Nessuna persona indicata nel file.</p>'}</div>
       <div class="modal-actions">
+        ${s.manuale ? `<button id="sd-elimina" type="button" class="btn ghost">🗑 Elimina lavoro</button>` : ""}
         <button id="sd-trova" type="button" class="btn primary">🔎 Trova personale interno</button>
       </div>`;
     $("#sd-trova").addEventListener("click", () => { chiudiServizio(); trovaPersonaleServizio(s.id); });
+    const btnElimina = $("#sd-elimina");
+    if (btnElimina) btnElimina.addEventListener("click", () => {
+      if (!confirm(`Eliminare il lavoro «${s.cliente}» del ${GL.impegni.formattaData(s.data)}?`)) return;
+      GL.servizi.rimuoviManuale(s.id);
+      chiudiServizio();
+      ricaricaServizi();
+    });
     const inpFine = $("#sd-orafine");
     if (inpFine) inpFine.addEventListener("change", () => onCambiaOraFine(s.id, inpFine.value));
     $("#modal-servizio").hidden = false;

@@ -44,13 +44,19 @@ INDIRIZZO, ATTIVITÀ, ORARI, TOTALE ORE, NOMINATIVO, SOCIETÀ, RIMBORSI, NOTE):
 1. Apri il file **`index.html`** con un doppio clic (si apre nel browser).
    - Serve una connessione internet per la mappa e per cercare gli indirizzi.
 2. Scheda **Lavori e calendario** (è la vista principale: lavori e calendario sono la stessa cosa):
+   - **📋 Elenco** (vista predefinita) — una riga per lavoro con data, cliente, attività, orario,
+     **nomi delle persone** e ore, raggruppate per giorno. Con il filtro **Cliente** vedi chi è
+     andato da quel cliente in tutto il mese; con il filtro **Dipendente** vedi dove ha lavorato
+     quella persona. La striscia **Periodo** restringe a tutto il mese, una settimana o un giorno.
+   - **+ Nuovo lavoro** — inserisci un lavoro scegliendo più giorni e più persone: nasce un lavoro
+     per ogni giorno. Resta salvato nel browser e si può eliminare dal dettaglio del lavoro.
    - **📊 Timeline** — righe = cliente/cantiere, colonne = giorni del mese, barre = lavori.
    - **🗓 Calendario lavori** — griglia del mese; clicca un giorno per l'elenco dei lavori con
      orario, indirizzo, ore e persone.
    - **👥 Calendario persone** — stessa griglia ma con **quante persone lavorano** ogni giorno;
      clicca un giorno per vedere chi, con che orario, su quale cantiere e quante ore.
-   - Filtri per categoria, attività e cliente; a destra la colonna **Coperti da esterni** con i
-     turni svolti da personale non in anagrafica (da lì apri il lavoro e cerchi una risorsa interna).
+   - Filtri per categoria, attività, cliente e **dipendente**. I turni svolti da personale non in
+     anagrafica sono segnalati come «esterni» sulle card e nel dettaglio del lavoro.
    - Nel dettaglio di un lavoro puoi correggere l'**ora di fine**: le ore (e quindi costi e ricavi)
      si ricalcolano subito.
 3. Scheda **Costi & ricavi** — la visione d'insieme tra entrate e uscite:
@@ -95,6 +101,8 @@ ma sono legati a quel computer/browser.
 | `js/tariffe.js` | Tariffe di vendita e costi orari (impostazioni economiche) |
 | `js/economia.js` | Calcolo di entrate, uscite e margine (funzioni pure) |
 | `js/economia-view.js` | Vista "Costi & ricavi" |
+| `js/elenco-view.js` | Modalità "Elenco": una riga per lavoro |
+| `js/nuovo-lavoro.js` | Inserimento di un lavoro su più giorni e più persone |
 | `js/app.js` | Lavori e calendario, ricerca personale, dipendenti |
 
 Tecnologie: HTML/CSS/JavaScript puro + [Leaflet](https://leafletjs.com) per la mappa +

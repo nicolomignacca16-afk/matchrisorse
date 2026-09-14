@@ -18,6 +18,7 @@ window.GL = window.GL || {};
 
 GL.servizi = (function () {
   const STORAGE_OREFINE = "gl_servizi_orefine_v2"; // ore di fine corrette nel gestionale
+  const STORAGE_MANUALI = "gl_servizi_manuali_v1"; // lavori inseriti a mano nel gestionale
 
   const CATEGORIE = [
     { id: "verde",   nome: "Fisso mensile",       desc: "Cantiere presente quasi tutti i giorni del mese" },
@@ -36,10 +37,64 @@ GL.servizi = (function () {
     { id: "sd2", data: "", cliente: "Cliente Beta", indirizzo: "Via Dante 10, Milano", attivita: "Facchinaggio", ora: "08:00", oraFine: "16:00", ore: 8, risorse: 1, persone: [{ n: "Luca Bianchi", id: null }], cat: "bianco", societa: "", note: "" },
   ];
 
-  function base() {
+  function importati() {
     return window.GL_SERVIZI_REALI && window.GL_SERVIZI_REALI.length
       ? window.GL_SERVIZI_REALI
       : SERVIZI_DEMO;
+  }
+  // Tutti i lavori: quelli importati dall'Excel più quelli inseriti a mano.
+  // Stesso id in entrambi (es. manuale già incluso in un file cifrato): vince la copia locale.
+  function base() {
+    const perId = new Map();
+    importati().concat(caricaManuali()).forEach((s) => perId.set(s.id, s));
+    return Array.from(perId.values());
+  }
+
+  // ------------------------------------------------ lavori inseriti a mano ---
+  function caricaManuali() {
+    try {
+      const lista = JSON.parse(localStorage.getItem(STORAGE_MANUALI) || "[]");
+      return Array.isArray(lista) ? lista.filter((s) => s && s.id && s.data) : [];
+    } catch (e) {
+      console.error("Lavori inseriti a mano non leggibili:", e);
+      return [];
+    }
+  }
+  function salvaManuali(lista) { localStorage.setItem(STORAGE_MANUALI, JSON.stringify(lista)); }
+  function aggiungiManuali(nuovi) { salvaManuali(caricaManuali().concat(nuovi)); }
+  function rimuoviManuale(id) { salvaManuali(caricaManuali().filter((s) => s.id !== id)); }
+
+  // Categoria dalla ricorrenza nel mese (stessa regola dell'import da Excel).
+  function categoriaPerGiorni(n) {
+    if (n >= 15) return "verde";
+    if (n >= 6) return "azzurro";
+    if (n >= 2) return "viola";
+    return "bianco";
+  }
+
+  // Costruisce un servizio per ogni data scelta, con le stesse persone (funzione pura).
+  // form = { cliente, indirizzo, attivita, ora, oraFine, note, date: [ISO], persone: [{n,id}] }
+  function nuoviServizi(form) {
+    const ore = form.oraFine ? durataDaOrari(form.ora, form.oraFine, "") : null;
+    const cat = categoriaPerGiorni(form.date.length);
+    const radice = "m" + Date.now().toString(36);
+    return form.date.slice().sort().map((data, i) => ({
+      id: `${radice}-${i}`,
+      data,
+      cliente: form.cliente,
+      indirizzo: form.indirizzo || "",
+      attivita: form.attivita,
+      ora: form.ora,
+      oraFine: form.oraFine || "",
+      pausa: "",
+      ore: ore ? Math.round(ore * 100) / 100 : 0,
+      risorse: form.persone.length,
+      persone: form.persone.map((p) => ({ n: p.n, id: p.id || null })),
+      cat,
+      societa: "",
+      note: form.note || "",
+      manuale: true,
+    }));
   }
 
   function clona(obj) { return JSON.parse(JSON.stringify(obj)); }
@@ -188,10 +243,25 @@ GL.servizi = (function () {
     return Array.from(perChiave.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }
 
+  // Tutte le persone che compaiono nei servizi: [{ chiave, nome }] in ordine alfabetico.
+  function personeDistinte(servizi) {
+    const m = new Map();
+    servizi.forEach((s) => (s.persone || []).forEach((p) => {
+      const chiave = p.id || "x:" + p.n;
+      if (!m.has(chiave)) m.set(chiave, { chiave, nome: p.n });
+    }));
+    return Array.from(m.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+
+  // Un servizio è svolto (anche) dalla persona con quella chiave?
+  function haPersona(s, chiave) {
+    return (s.persone || []).some((p) => (p.id || "x:" + p.n) === chiave);
+  }
+
   // Tutti i servizi di una persona (per chiave: id dipendente oppure "x:Nome").
   function serviziPersona(servizi, chiave) {
     return servizi
-      .filter((s) => (s.persone || []).some((p) => (p.id || "x:" + p.n) === chiave))
+      .filter((s) => haPersona(s, chiave))
       .sort((a, b) => (a.data + (a.ora || "")).localeCompare(b.data + (b.ora || "")));
   }
 
@@ -273,7 +343,8 @@ GL.servizi = (function () {
     CATEGORIE, catMeta, carica, salvaOreFine, meseIniziale,
     delMese, delGiorno, contaPerCategoria, attivitaDistinte, clientiDistinti,
     orePersona, oreTotali, oreMancanti, intervallo, fasciaOraria, durataDaOrari, oraValida,
-    personeGiorno, serviziPersona, impegniPerDipendente,
+    personeGiorno, personeDistinte, haPersona, serviziPersona, impegniPerDipendente,
+    nuoviServizi, aggiungiManuali, rimuoviManuale, categoriaPerGiorni,
     mansioniPerAttivita, candidatiPerAttivita,
   };
 })();
